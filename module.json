@@ -1,0 +1,22 @@
+{
+  "name": "atmel-rf-driver",
+  "version": "0.0.0",
+  "description": "RF driver for Atmel AT86RF233",
+  "keywords": [
+    "rf",
+    "driver"
+  ],
+  "author": "Seppo Takalo <seppo.takalo@arm.com>",
+  "repository": {
+    "url": "git://git.oulu.arm.com/nanomesh/atmel-rf-driver.git",
+    "type": "git"
+  },
+  "homepage": "",
+  "license": "proprietary",
+  "dependencies": {
+    "libservice": "git://git.oulu.arm.com/nanomesh/libService.git#yotta-build",
+    "nanostack": "git://git.oulu.arm.com/nanomesh/nanostack.git#yotta-build",
+    "mbed": "mbedmicro/mbed_private#dev_async_hal_yotta"
+    },
+  "targetDependencies": {}
+}
