@@ -11,6 +11,8 @@
 extern "C" {
 #endif
 
+#include "nanostack/platform/arm_hal_phy.h"
+
 /*AT86RF212 PHY Modes*/
 #define BPSK_20                     0x00
 #define BPSK_40                     0x04
