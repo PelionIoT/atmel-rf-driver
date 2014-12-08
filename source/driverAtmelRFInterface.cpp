@@ -18,6 +18,9 @@ DigitalOut RF_CS(D10);
 DigitalOut RF_RST(D5);
 DigitalOut RF_SLP_TR(D7);
 InterruptIn RF_IRQ(D4);
+Timeout ack_timer;
+Timeout cal_timer;
+Timeout cca_timer;
 
 #define PHY_CCA_TIMER 0x01
 
@@ -28,7 +31,6 @@ static int8_t rf_rx_rssi;
 static uint8_t rf_rx_status;
 /*TODO: RSSI Base value setting*/
 static int8_t rf_rssi_base_val = -91;
-static uint8_t phy_timers_enabled = 0;
 
 static uint8_t rf_if_spi_exchange(uint8_t out);
 
@@ -72,7 +74,7 @@ rf_trx_part_e rf_radio_type_read(void)
  */
 void rf_if_timer_init(void)
 {
-  //TODO
+  // nothing to do...
 }
 
 /*
@@ -84,7 +86,7 @@ void rf_if_timer_init(void)
  */
 void rf_if_ack_wait_timer_start(uint16_t slots)
 {
-  // TODO
+  ack_timer.attach(rf_ack_wait_timer_interrupt, slots*50e-6);
 }
 
 /*
@@ -96,7 +98,7 @@ void rf_if_ack_wait_timer_start(uint16_t slots)
  */
 void rf_if_calibration_timer_start(uint32_t slots)
 {
-  // TODO
+  cal_timer.attach(rf_calibration_timer_interrupt, slots*50e-6);
 }
 
 /*
@@ -108,7 +110,7 @@ void rf_if_calibration_timer_start(uint32_t slots)
  */
 void rf_if_cca_timer_start(uint32_t slots)
 {
-  // TODO
+  cca_timer.attach(rf_cca_timer_interrupt, slots*50e-6);
 }
 
 /*
@@ -120,58 +122,7 @@ void rf_if_cca_timer_start(uint32_t slots)
  */
 void rf_if_ack_wait_timer_stop(void)
 {
-  phy_timers_enabled &= ~PHY_ACK_WAIT_TIMER;
-}
-
-/*
- * \brief Function is a call back for ACK wait timeout.
- *
- * \param none
- *
- * \return none
- */
-void rf_if_ack_wait_timer_interrupt(void)
-{
-  if(phy_timers_enabled & PHY_ACK_WAIT_TIMER)
-  {
-    phy_timers_enabled &= ~PHY_ACK_WAIT_TIMER;
-    //TODO tc_disable_interrupt(phy_tc_device, CPAS_INT);
-    rf_ack_wait_timer_interrupt();
-  }
-}
-
-/*
- * \brief Function is a call back for calibration interval timer.
- *
- * \param none
- *
- * \return none
- */
-void rf_if_calibration_timer_interrupt(void)
-{
-  if(phy_timers_enabled & PHY_CALIBRATION_TIMER)
-  {
-    phy_timers_enabled &= ~PHY_CALIBRATION_TIMER;
-    // TODO tc_disable_interrupt(phy_tc_device, CPBS_INT);
-    rf_calibration_timer_interrupt();
-  }
-}
-
-/*
- * \brief Function is a call back for CCA interval timer.
- *
- * \param none
- *
- * \return none
- */
-void rf_if_cca_timer_interrupt(void)
-{
-  if(phy_timers_enabled & PHY_CCA_TIMER)
-  {
-    phy_timers_enabled &= ~PHY_CCA_TIMER;
-    //TODO tc_disable_interrupt(phy_tc_device, CPCS_INT);
-    rf_cca_timer_interrupt();
-  }
+  ack_timer.detach();
 }
 
 
