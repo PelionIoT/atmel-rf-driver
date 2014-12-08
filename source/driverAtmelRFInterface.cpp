@@ -11,18 +11,18 @@
 #include "low_level_RF.h"
 #include "mbed.h"
 
-extern "C" void rf_if_interrupt_handler(void);
+void rf_if_interrupt_handler(void);
 
 SPI spi(D11, D12, D13);
 DigitalOut RF_CS(D10);
+
 DigitalOut RF_RST(D5);
 DigitalOut RF_SLP_TR(D7);
-InterruptIn RF_IRQ(D4);
+InterruptIn RF_IRQ(D9);
+
 Timeout ack_timer;
 Timeout cal_timer;
 Timeout cca_timer;
-
-#define PHY_CCA_TIMER 0x01
 
 void (*app_rf_settings_cb)(void) = 0;
 static uint8_t rf_part_num = 0;
@@ -152,6 +152,8 @@ void rf_if_read_payload(uint8_t *ptr, uint8_t sram_address, uint8_t len)
 {
   uint8_t i;
 
+  RF_CS = 0;
+  wait(1e-6);
   rf_if_spi_exchange(0x20);
   rf_if_spi_exchange(sram_address);
   for(i=0; i<len; i++)
@@ -159,8 +161,10 @@ void rf_if_read_payload(uint8_t *ptr, uint8_t sram_address, uint8_t len)
 
   /*Read LQI and RSSI in variable*/
   rf_rx_lqi = rf_if_spi_exchange(0);
-    rf_rx_rssi = rf_if_spi_exchange(0);
-    rf_rx_status = rf_if_spi_exchange(0);
+  rf_rx_rssi = rf_if_spi_exchange(0);
+  rf_rx_status = rf_if_spi_exchange(0);
+  wait(1e-6);
+  RF_CS = 1;
 }
 
 /*
@@ -207,10 +211,10 @@ void rf_if_write_register(uint8_t addr, uint8_t data)
 {
   uint8_t cmd = 0xC0;
   platform_enter_critical();
-
+  RF_CS = 0;
   rf_if_spi_exchange(cmd | addr);
   rf_if_spi_exchange(data);
-
+  RF_CS = 1;
   platform_exit_critical();
 }
 
@@ -226,9 +230,10 @@ uint8_t rf_if_read_register(uint8_t addr)
   uint8_t cmd = 0x80;
   uint8_t data;
   platform_enter_critical();
-
+  RF_CS = 0;
   rf_if_spi_exchange(cmd | addr);
   data = rf_if_spi_exchange(0);
+  RF_CS = 1;
   platform_exit_critical();
   return data;
 }
@@ -242,12 +247,18 @@ uint8_t rf_if_read_register(uint8_t addr)
  */
 void rf_if_reset_radio(void)
 {
+  RF_IRQ.rise(0);
   RF_RST = 1;
-  wait(5e-4);
+  wait(10e-4);
   RF_RST = 0;
   wait(10e-3);
+  RF_CS = 1;
+  RF_SLP_TR = 0;
+  wait(10e-3);
   RF_RST = 1;
-  wait(5e-3);
+  wait(10e-3);
+
+  RF_IRQ.rise(&rf_if_interrupt_handler);
 }
 
 /*
@@ -378,7 +389,7 @@ void rf_if_write_rf_settings(void)
   rf_part_num = rf_if_read_part_num();
 
   rf_if_write_register(XAH_CTRL_0,0);
-  rf_if_write_register(TRX_CTRL_1, 0x21);
+  rf_if_write_register(TRX_CTRL_1, 0x20);
 
   /*CCA Mode - Carrier sense OR energy above threshold. Channel list is set separately*/
   rf_if_write_register(PHY_CC_CCA, 0x05);
@@ -593,12 +604,13 @@ void rf_if_write_frame_buffer(uint8_t *ptr, uint8_t length)
   uint8_t i;
   uint8_t cmd = 0x60;
 
+  RF_CS = 0;
   rf_if_spi_exchange(cmd);
   rf_if_spi_exchange(length + 2);
   for(i=0; i<length; i++)
     rf_if_spi_exchange(*ptr++);
 
-  wait(1e-3);
+  RF_CS = 1;
 }
 
 /*
@@ -720,8 +732,15 @@ uint8_t rf_if_read_received_frame_length(void)
 {
   uint8_t length;
 
+  RF_CS = 0;
+  wait(1e-6);
+
   rf_if_spi_exchange(0x20);
   length = rf_if_spi_exchange(0);
+
+  wait(1e-6);
+  RF_CS = 1;
+
   return length;
 }
 
@@ -781,18 +800,6 @@ void rf_if_set_channel_register(uint8_t channel)
 }
 
 /*
- * \brief Function returns the pointer to RF interrupt handler
- *
- * \param none
- *
- * \return RF interrupt handler function
- */
-void (*rf_if_get_rf_interrupt_function(void))(void)
-{
-  return rf_if_interrupt_handler;
-}
-
-/*
  * \brief Function is a RF interrupt vector. End of frame in RX and TX are handled here as well as CCA process interrupt.
  *
  * \param none
@@ -849,8 +856,6 @@ void rf_if_interrupt_handler(void)
 uint8_t rf_if_spi_exchange(uint8_t out)
 {
   uint8_t v;
-  RF_CS = 0;
   v = spi.write(out);
-  RF_CS = 1;
   return v;
 }
