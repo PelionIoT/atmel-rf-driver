@@ -206,17 +206,6 @@ void rf_cca_timer_interrupt(void)
     }
 }
 
-/*
- * \brief Function initialises the RF timer for ACK wait and calibration.
- *
- * \param none
- *
- * \return none
- */
-void rf_timer_init(void)
-{
-    rf_if_timer_init();
-}
 
 /*
  * \brief Function starts the ACK wait timeout.
@@ -421,8 +410,6 @@ void rf_channel_set(uint8_t ch)
  */
 void rf_init(void)
 {
-    /*Initialise timers*/
-    rf_timer_init();
     /*Reset RF module*/
     rf_if_reset_radio();
     /*Write RF settings*/
