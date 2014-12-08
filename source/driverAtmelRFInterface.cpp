@@ -74,7 +74,7 @@ rf_trx_part_e rf_radio_type_read(void)
  */
 void rf_if_timer_init(void)
 {
-  // nothing to do...
+  RF_IRQ.rise(rf_if_interrupt_handler);
 }
 
 /*
