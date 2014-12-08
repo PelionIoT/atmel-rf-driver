@@ -24,7 +24,7 @@ static uint8_t rf_flags = 0;
 static uint8_t rf_rnd_rssi = 0;
 static int8_t rf_radio_driver_id = -1;
 static phy_device_driver_s device_driver;
-static uint8_t atmel_MAC[8];
+static uint8_t atmel_MAC[8] = {1, 2, 3, 4, 5, 6, 7, 8};
 static phy_device_channel_info_s channel_info;
 static uint8_t mac_tx_handle = 0;
 static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_t rf_channel);
@@ -90,6 +90,8 @@ int8_t rf_device_register(void)
 {
     rf_trx_part_e radio_type;
 
+//    if (!at24mac_read_eui64(atmel_MAC))
+//        return -1; //No MAC
     rf_init();
 
     radio_type = rf_radio_type_read();
