@@ -4,6 +4,7 @@
 #include "atmel-rf-driver/driverRFPhy.h"
 #include "driverAtmelRFInterface.h"
 #include <string.h>
+#include "at24mac.h"
 
 /*RF receive buffer*/
 static uint8_t rf_buffer[RF_BUFFER_SIZE];
@@ -13,7 +14,7 @@ static uint16_t rf_ack_wait_duration = RF_ACK_WAIT_DEFAULT_TIMEOUT;
 static int8_t rf_sensitivity = RF_DEFAULT_SENSITIVITY;
 static uint8_t rf_mode = RF_MODE_NORMAL;
 static uint8_t radio_tx_power = 0x07;
-static uint8_t rf_phy_channel;
+static uint8_t rf_phy_channel = 12;
 static uint8_t rf_tuned = 1;
 static uint8_t rf_use_antenna_diversity = 0;
 static uint8_t tx_sequence = 0xff;
@@ -88,6 +89,7 @@ void rf_flags_reset(void)
 int8_t rf_device_register(void)
 {
     rf_trx_part_e radio_type;
+
     rf_init();
 
     radio_type = rf_radio_type_read();

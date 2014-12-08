@@ -66,18 +66,6 @@ rf_trx_part_e rf_radio_type_read(void)
 
 
 /*
- * \brief Function initialises the RF timer for ACK wait and calibration.
- *
- * \param none
- *
- * \return none
- */
-void rf_if_timer_init(void)
-{
-  RF_IRQ.rise(rf_if_interrupt_handler);
-}
-
-/*
  * \brief Function starts the ACK wait timeout.
  *
  * \param slots Given slots, resolution 50us
