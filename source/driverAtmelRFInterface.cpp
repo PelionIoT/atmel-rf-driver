@@ -8,7 +8,6 @@
 #include "nanostack/platform/arm_hal_phy.h"
 #include "atmel-rf-driver/driverRFPhy.h"
 #include "driverAtmelRFInterface.h"
-#include "low_level_RF.h"
 #include "mbed.h"
 
 void rf_if_interrupt_handler(void);
@@ -153,7 +152,6 @@ void rf_if_read_payload(uint8_t *ptr, uint8_t sram_address, uint8_t len)
   uint8_t i;
 
   RF_CS = 0;
-  wait(1e-6);
   rf_if_spi_exchange(0x20);
   rf_if_spi_exchange(sram_address);
   for(i=0; i<len; i++)
@@ -163,7 +161,6 @@ void rf_if_read_payload(uint8_t *ptr, uint8_t sram_address, uint8_t len)
   rf_rx_lqi = rf_if_spi_exchange(0);
   rf_rx_rssi = rf_if_spi_exchange(0);
   rf_rx_status = rf_if_spi_exchange(0);
-  wait(1e-6);
   RF_CS = 1;
 }
 
@@ -733,12 +730,8 @@ uint8_t rf_if_read_received_frame_length(void)
   uint8_t length;
 
   RF_CS = 0;
-  wait(1e-6);
-
   rf_if_spi_exchange(0x20);
   length = rf_if_spi_exchange(0);
-
-  wait(1e-6);
   RF_CS = 1;
 
   return length;
