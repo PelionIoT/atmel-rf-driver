@@ -152,6 +152,7 @@ void rf_if_read_payload(uint8_t *ptr, uint8_t sram_address, uint8_t len)
   uint8_t i;
 
   RF_CS = 0;
+  wait_us(1);
   rf_if_spi_exchange(0x20);
   rf_if_spi_exchange(sram_address);
   for(i=0; i<len; i++)
@@ -209,6 +210,7 @@ void rf_if_write_register(uint8_t addr, uint8_t data)
   uint8_t cmd = 0xC0;
   platform_enter_critical();
   RF_CS = 0;
+  wait_us(1);
   rf_if_spi_exchange(cmd | addr);
   rf_if_spi_exchange(data);
   RF_CS = 1;
@@ -228,6 +230,7 @@ uint8_t rf_if_read_register(uint8_t addr)
   uint8_t data;
   platform_enter_critical();
   RF_CS = 0;
+  wait_us(1);
   rf_if_spi_exchange(cmd | addr);
   data = rf_if_spi_exchange(0);
   RF_CS = 1;
@@ -244,6 +247,7 @@ uint8_t rf_if_read_register(uint8_t addr)
  */
 void rf_if_reset_radio(void)
 {
+  spi.frequency(7500000);
   RF_IRQ.rise(0);
   RF_RST = 1;
   wait(10e-4);
@@ -602,6 +606,7 @@ void rf_if_write_frame_buffer(uint8_t *ptr, uint8_t length)
   uint8_t cmd = 0x60;
 
   RF_CS = 0;
+  wait_us(1);
   rf_if_spi_exchange(cmd);
   rf_if_spi_exchange(length + 2);
   for(i=0; i<length; i++)
@@ -730,6 +735,7 @@ uint8_t rf_if_read_received_frame_length(void)
   uint8_t length;
 
   RF_CS = 0;
+  wait_us(1);
   rf_if_spi_exchange(0x20);
   length = rf_if_spi_exchange(0);
   RF_CS = 1;
