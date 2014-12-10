@@ -16,7 +16,7 @@
   "dependencies": {
     "libservice": "git://git.oulu.arm.com/nanomesh/libService.git#yotta-build",
     "nanostack": "git://git.oulu.arm.com/nanomesh/nanostack.git#yotta-build",
-    "mbed": "mbedmicro/mbed_private#dev_async_hal_yotta"
+    "mbed": "ARMmbed/mbed-sdk"
     },
   "targetDependencies": {}
 }
