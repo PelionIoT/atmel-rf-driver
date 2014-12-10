@@ -1,6 +1,6 @@
 {
   "name": "atmel-rf-driver",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "RF driver for Atmel AT86RF233",
   "keywords": [
     "rf",
@@ -17,6 +17,6 @@
     "libservice": "git://git.oulu.arm.com/nanomesh/libService.git#yotta-build",
     "nanostack": "git://git.oulu.arm.com/nanomesh/nanostack.git#yotta-build",
     "mbed": "ARMmbed/mbed-sdk"
-    },
+  },
   "targetDependencies": {}
 }
