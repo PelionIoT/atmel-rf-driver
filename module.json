@@ -14,8 +14,8 @@
   "homepage": "",
   "license": "proprietary",
   "dependencies": {
-    "libservice": "git://git.oulu.arm.com/nanomesh/libService.git#yotta-build",
-    "nanostack": "git://git.oulu.arm.com/nanomesh/nanostack.git#yotta-build",
+    "libservice": "ARMmbed/nanomesh-libService#~0.0.3",
+    "nanostack": "ARMmbed/nanomesh-nanostack#~0.0.3",
     "mbed": "ARMmbed/mbed-sdk"
   },
   "targetDependencies": {}
