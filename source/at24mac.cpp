@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2014 ARM. All rights reserved.
+ */
 #include "at24mac.h"
 #include "mbed.h"
 

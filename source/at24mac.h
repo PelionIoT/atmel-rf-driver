@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2014 ARM. All rights reserved.
+ */
 #ifndef AT2MAC_H
 #define AT24MAC_H
 

@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2014 ARM. All rights reserved.
+ */
 #include "libService/ns_types.h"
 #include "libService/platform/arm_hal_interrupt.h"
 #include "nanostack/platform/arm_hal_phy.h"

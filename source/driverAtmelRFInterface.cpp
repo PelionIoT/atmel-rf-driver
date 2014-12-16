@@ -1,4 +1,7 @@
 /*
+ * Copyright (c) 2014 ARM. All rights reserved.
+ */
+/*
  * driverAtmelRFInterface.c
  *
  *  Created on: 20 Jan 2014
