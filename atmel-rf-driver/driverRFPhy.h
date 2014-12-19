@@ -1,8 +1,5 @@
 /*
- * driverRFPhy.h
- *
- *  Created on: 21 May 2014
- *      Author: jarpas01
+ * Copyright (c) 2014 ARM. All rights reserved.
  */
 
 #ifndef DRIVERRFPHY_H_
