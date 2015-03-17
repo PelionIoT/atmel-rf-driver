@@ -7,16 +7,11 @@
     "driver"
   ],
   "author": "Seppo Takalo <seppo.takalo@arm.com>",
-  "repository": {
-    "url": "git://git.oulu.arm.com/nanomesh/atmel-rf-driver.git",
-    "type": "git"
-  },
-  "homepage": "",
   "license": "proprietary",
   "dependencies": {
-    "libservice": "ARMmbed/nanomesh-libService#~0.0.3",
-    "nanostack": "ARMmbed/nanomesh-nanostack#~0.0.3",
-    "mbed": "ARMmbed/mbed-sdk"
+    "mbed-client-libservice" : "ARMmbed/mbed-client-libservice#alpha2-release",
+    "mbed-6lowpan" : "ARMmbed/mbed-6lowpan#alpha2-release",
+    "mbed" : "ARMmbed/mbed-sdk-private"
   },
   "targetDependencies": {}
 }
