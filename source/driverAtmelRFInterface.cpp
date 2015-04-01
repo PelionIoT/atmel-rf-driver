@@ -37,7 +37,7 @@ static uint8_t rf_if_spi_exchange(uint8_t out);
 static void delay_ns(uint32_t ns)
 {
   uint32_t ticks_per_us = ((SystemCoreClock/1000)/1000);
-  uint32_t ticks = (ticks_per_us * ns + 500) / 2000; // Round up to next tick value before dividing
+  uint32_t ticks = (ticks_per_us * ns + 500) / 1000; // Round up to next tick value before dividing
   while(ticks--)
     __asm__ volatile ("nop");
 }
