@@ -18,7 +18,7 @@
 #define EUI64_LEN 8
 #define EUI48_LEN 6
 
-I2C i2c(D14, D15);
+I2C i2c(I2C_SDA, I2C_SCL);
 
 /**
  * Read unique serial number from chip.
