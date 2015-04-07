@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 ARM. All rights reserved.
+ * Copyright (c) 2014-2015 ARM. All rights reserved.
  */
 #include "at24mac.h"
 #include "mbed.h"
@@ -28,7 +28,7 @@ I2C i2c(I2C_SDA, I2C_SCL);
 extern "C" int at24mac_read_serial(void *buf)
 {
 	char offset = AT24MAC_SERIAL_OFFSET;
-	if (!i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
+	if (i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
 		return -1; //No ACK
 	return i2c.read(AT24MAC_SERIAL_ADDRESS, (char*)buf, SERIAL_LEN);
 }
@@ -41,7 +41,7 @@ extern "C" int at24mac_read_serial(void *buf)
 extern "C" int at24mac_read_eui64(void *buf)
 {
 	char offset = AT24MAC_EUI64_OFFSET;
-	if (!i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
+	if (i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
 		return -1; //No ACK
 	return i2c.read(AT24MAC_SERIAL_ADDRESS, (char*)buf, EUI64_LEN);
 }
@@ -54,7 +54,7 @@ extern "C" int at24mac_read_eui64(void *buf)
 extern "C" int at24mac_read_eui48(void *buf)
 {
 	char offset = AT24MAC_EUI48_OFFSET;
-	if (!i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
+	if (i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
 		return -1; //No ACK
 	return i2c.read(AT24MAC_SERIAL_ADDRESS, (char*)buf, EUI48_LEN);
 }
