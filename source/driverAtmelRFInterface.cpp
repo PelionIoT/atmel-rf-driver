@@ -4,8 +4,6 @@
 /*
  * driverAtmelRFInterface.c
  *
- *  Created on: 20 Jan 2014
- *      Author: jarpas01
  */
 #include "libService/platform/arm_hal_interrupt.h"
 #include "nanostack/platform/arm_hal_phy.h"
@@ -13,18 +11,17 @@
 #include "driverAtmelRFInterface.h"
 #include "mbed.h"
 
-void rf_if_interrupt_handler(void);
+// HW pins to RF chip
+#define SPI_SPEED 7500000
+static SPI spi(D11, D12, D13);
+static DigitalOut RF_CS(D10);
+static DigitalOut RF_RST(D5);
+static DigitalOut RF_SLP_TR(D7);
+static InterruptIn RF_IRQ(D9);
 
-SPI spi(D11, D12, D13);
-DigitalOut RF_CS(D10);
-
-DigitalOut RF_RST(D5);
-DigitalOut RF_SLP_TR(D7);
-InterruptIn RF_IRQ(D9);
-
-Timeout ack_timer;
-Timeout cal_timer;
-Timeout cca_timer;
+static Timeout ack_timer;
+static Timeout cal_timer;
+static Timeout cca_timer;
 
 void (*app_rf_settings_cb)(void) = 0;
 static uint8_t rf_part_num = 0;
@@ -35,6 +32,18 @@ static uint8_t rf_rx_status;
 static int8_t rf_rssi_base_val = -91;
 
 static uint8_t rf_if_spi_exchange(uint8_t out);
+
+/* Delay functions for RF Chip SPI access */
+static void delay_ns(uint32_t ns)
+{
+  uint32_t ticks_per_us = ((SystemCoreClock/1000)/1000);
+  uint32_t ticks = (ticks_per_us * ns + 500) / 1000; // Round up to next tick value before dividing
+  while(ticks--)
+    __asm__ volatile ("nop");
+}
+
+#define CS_SELECT()  {RF_CS = 0; delay_ns(180);} // t1 = 180ns, SEL falling edge to MISO active
+#define CS_RELEASE() {RF_CS = 1; delay_ns(250);} // t8 = 250ns, SPI idle time between consecutive access
 
 /*
  * \brief Read connected radio part.
@@ -154,8 +163,7 @@ void rf_if_read_payload(uint8_t *ptr, uint8_t sram_address, uint8_t len)
 {
   uint8_t i;
 
-  RF_CS = 0;
-  wait_us(1);
+  CS_SELECT();
   rf_if_spi_exchange(0x20);
   rf_if_spi_exchange(sram_address);
   for(i=0; i<len; i++)
@@ -165,7 +173,7 @@ void rf_if_read_payload(uint8_t *ptr, uint8_t sram_address, uint8_t len)
   rf_rx_lqi = rf_if_spi_exchange(0);
   rf_rx_rssi = rf_if_spi_exchange(0);
   rf_rx_status = rf_if_spi_exchange(0);
-  RF_CS = 1;
+  CS_RELEASE();
 }
 
 /*
@@ -212,11 +220,10 @@ void rf_if_write_register(uint8_t addr, uint8_t data)
 {
   uint8_t cmd = 0xC0;
   platform_enter_critical();
-  RF_CS = 0;
-  wait_us(1);
+  CS_SELECT();
   rf_if_spi_exchange(cmd | addr);
   rf_if_spi_exchange(data);
-  RF_CS = 1;
+  CS_RELEASE();
   platform_exit_critical();
 }
 
@@ -232,11 +239,10 @@ uint8_t rf_if_read_register(uint8_t addr)
   uint8_t cmd = 0x80;
   uint8_t data;
   platform_enter_critical();
-  RF_CS = 0;
-  wait_us(1);
+  CS_SELECT();
   rf_if_spi_exchange(cmd | addr);
   data = rf_if_spi_exchange(0);
-  RF_CS = 1;
+  CS_RELEASE();
   platform_exit_critical();
   return data;
 }
@@ -250,13 +256,14 @@ uint8_t rf_if_read_register(uint8_t addr)
  */
 void rf_if_reset_radio(void)
 {
-  spi.frequency(7500000);
+  SystemCoreClockUpdate();
+  spi.frequency(SPI_SPEED);
   RF_IRQ.rise(0);
   RF_RST = 1;
   wait(10e-4);
   RF_RST = 0;
   wait(10e-3);
-  RF_CS = 1;
+  CS_RELEASE();
   RF_SLP_TR = 0;
   wait(10e-3);
   RF_RST = 1;
@@ -608,14 +615,13 @@ void rf_if_write_frame_buffer(uint8_t *ptr, uint8_t length)
   uint8_t i;
   uint8_t cmd = 0x60;
 
-  RF_CS = 0;
-  wait_us(1);
+  CS_SELECT();
   rf_if_spi_exchange(cmd);
   rf_if_spi_exchange(length + 2);
   for(i=0; i<length; i++)
     rf_if_spi_exchange(*ptr++);
 
-  RF_CS = 1;
+  CS_RELEASE();
 }
 
 /*
@@ -737,11 +743,10 @@ uint8_t rf_if_read_received_frame_length(void)
 {
   uint8_t length;
 
-  RF_CS = 0;
-  wait_us(1);
+  CS_SELECT();
   rf_if_spi_exchange(0x20);
   length = rf_if_spi_exchange(0);
-  RF_CS = 1;
+  CS_RELEASE();
 
   return length;
 }
@@ -859,5 +864,7 @@ uint8_t rf_if_spi_exchange(uint8_t out)
 {
   uint8_t v;
   v = spi.write(out);
+  // t9 = t5 = 250ns, delay between LSB of last byte to next MSB or delay between LSB & SEL rising
+  delay_ns(250);
   return v;
 }
