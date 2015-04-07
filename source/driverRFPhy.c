@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 ARM. All rights reserved.
+ * Copyright (c) 2014-2015 ARM. All rights reserved.
  */
 #include "libService/ns_types.h"
 #include "libService/platform/arm_hal_interrupt.h"
@@ -93,8 +93,9 @@ int8_t rf_device_register(void)
 {
     rf_trx_part_e radio_type;
 
-//    if (!at24mac_read_eui64(atmel_MAC))
-//        return -1; //No MAC
+    if (0 != at24mac_read_eui64(atmel_MAC))
+        return -1; //No MAC
+
     rf_init();
 
     radio_type = rf_radio_type_read();
