@@ -1,6 +1,6 @@
 {
   "name": "atmel-rf-driver",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "RF driver for Atmel AT86RF233",
   "private": true,
   "keywords": [
@@ -10,9 +10,9 @@
   "author": "Seppo Takalo <seppo.takalo@arm.com>",
   "license": "proprietary",
   "dependencies": {
-    "mbed-client-libservice" : "ARMmbed/mbed-client-libservice",
-    "mbed-6lowpan" : "ARMmbed/mbed-6lowpan",
-    "mbed" : "ARMmbed/mbed-sdk-private"
+    "mbed-client-libservice": "ARMmbed/mbed-client-libservice",
+    "mbed-6lowpan": "ARMmbed/mbed-6lowpan",
+    "mbed": "ARMmbed/mbed-sdk-private"
   },
   "targetDependencies": {}
 }
