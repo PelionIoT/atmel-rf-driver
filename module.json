@@ -10,8 +10,8 @@
   "author": "Seppo Takalo <seppo.takalo@arm.com>",
   "license": "proprietary",
   "dependencies": {
-    "mbed-client-libservice" : "ARMmbed/mbed-client-libservice#alpha2-release",
-    "mbed-6lowpan" : "ARMmbed/mbed-6lowpan#alpha2-release",
+    "mbed-client-libservice" : "ARMmbed/mbed-client-libservice",
+    "mbed-6lowpan" : "ARMmbed/mbed-6lowpan",
     "mbed" : "ARMmbed/mbed-sdk-private"
   },
   "targetDependencies": {}
