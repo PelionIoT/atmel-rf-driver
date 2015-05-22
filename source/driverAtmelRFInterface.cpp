@@ -256,7 +256,6 @@ uint8_t rf_if_read_register(uint8_t addr)
  */
 void rf_if_reset_radio(void)
 {
-  SystemCoreClockUpdate();
   spi.frequency(SPI_SPEED);
   RF_IRQ.rise(0);
   RF_RST = 1;
