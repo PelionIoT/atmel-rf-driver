@@ -12,7 +12,7 @@
   "dependencies": {
     "mbed-client-libservice": "~2.0.9",
     "mbed-6lowpan": "~0.0.6",
-    "mbed": "~3.0.1"
+    "mbed-core": "~0.1.1"
   },
   "targetDependencies": {}
 }
