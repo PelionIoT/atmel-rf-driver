@@ -10,7 +10,7 @@
   "author": "Seppo Takalo <seppo.takalo@arm.com>",
   "license": "proprietary",
   "dependencies": {
-    "mbed-client-libservice": "~2.0.9",
+    "mbed-client-libservice": "~3.0.0",
     "mbed-6lowpan": "~0.0.6",
     "mbed-core": "~0.1.1"
   },

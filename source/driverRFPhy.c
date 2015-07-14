@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2014-2015 ARM. All rights reserved.
  */
-#include "libService/ns_types.h"
-#include "libService/platform/arm_hal_interrupt.h"
+#include "ns_types.h"
+#include "platform/arm_hal_interrupt.h"
 #include "nanostack/platform/arm_hal_phy.h"
 #include "atmel-rf-driver/driverRFPhy.h"
 #include "driverAtmelRFInterface.h"
