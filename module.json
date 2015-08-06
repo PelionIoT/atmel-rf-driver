@@ -1,6 +1,6 @@
 {
   "name": "atmel-rf-driver",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "RF driver for Atmel AT86RF233",
   "private": true,
   "keywords": [
