@@ -12,7 +12,7 @@
   "dependencies": {
     "mbed-client-libservice": "~3.0.0",
     "sal-stack-nanostack": "~0.0.6",
-    "mbed-drivers": "~0.5.0"
+    "mbed-drivers": "~0.6.0"
   },
   "targetDependencies": {}
 }
