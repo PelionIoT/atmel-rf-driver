@@ -10,7 +10,7 @@
   "author": "Seppo Takalo <seppo.takalo@arm.com>",
   "license": "Apache-2.0",
   "dependencies": {
-    "mbed-client-libservice": "~3.0.0",
+    "nanostack-libservice": "~3.0.0",
     "sal-stack-nanostack": "~0.0.6",
     "mbed-drivers": "~0.6.0"
   },
