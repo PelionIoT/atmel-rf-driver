@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 ARM Limited. All rights reserved.
+ * Copyright (c) 2014-2015 ARM Limited. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  * Licensed under the Apache License, Version 2.0 (the License); you may
  * not use this file except in compliance with the License.
@@ -13,13 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/*
- * driverAtmelRFInterface.h
- *
- *  Created on: 14 July 2014
- *      Author: mBed Team
- */
-
 #ifndef DRIVERRFINTERFACE_H_
 #define DRIVERRFINTERFACE_H_
 #ifdef __cplusplus
