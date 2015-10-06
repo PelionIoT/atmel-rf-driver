@@ -524,6 +524,7 @@ void rf_poll_trx_state_change(rf_trx_states_t trx_state)
  */
 int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, data_protocol_e data_protocol )
 {
+    (void)data_protocol;
     /*Check if transmitter is busy*/
     if(rf_if_read_trx_state() == BUSY_RX_AACK)
     {
@@ -1005,6 +1006,8 @@ static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_pt
             break;
         /*Read status of the link*/
         case PHY_EXTENSION_READ_LINK_STATUS:
+            break;
+        default:
             break;
     }
     return 0;
