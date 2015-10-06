@@ -11,7 +11,7 @@
   "dependencies": {
     "nanostack-libservice": "~3.0.0",
     "sal-stack-nanostack": "^2.1.0",
-    "mbed-drivers": "~0.8.0"
+    "mbed-drivers": "~0.9.0"
   },
   "targetDependencies": {}
 }
