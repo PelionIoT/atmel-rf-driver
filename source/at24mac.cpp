@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include "at24mac.h"
-#include "mbed.h"
+#include "mbed-drivers/mbed.h"
 
 /* Device addressing */
 #define AT24MAC_EEPROM_ADDRESS		(0x0A<<4)
