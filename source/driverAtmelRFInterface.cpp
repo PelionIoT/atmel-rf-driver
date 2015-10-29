@@ -17,7 +17,7 @@
 #include "nanostack/platform/arm_hal_phy.h"
 #include "atmel-rf-driver/driverRFPhy.h"
 #include "driverAtmelRFInterface.h"
-#include "mbed.h"
+#include "mbed-drivers/mbed.h"
 
 // HW pins to RF chip
 #define SPI_SPEED 7500000
