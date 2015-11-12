@@ -20,7 +20,7 @@
  * AT24MAC drivers.
  *
  * This is a EEPROM chip designed to contain factory programmed read-only EUI-64 or EUI-48,
- * a 128bit serial number and some user probrammable EEPROM.
+ * a 128bit serial number and some user programmable EEPROM.
  *
  * AT24MAC602 contains EUI-64, use at24mac_read_eui64()
  * AT24MAC402 contains EUI-64, use at24mac_read_eui48()
