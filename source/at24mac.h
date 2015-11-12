@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef AT2MAC_H
+#ifndef AT24MAC_H
 #define AT24MAC_H
 
 /*
