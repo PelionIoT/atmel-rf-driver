@@ -40,11 +40,20 @@ static uint8_t rf_rnd_rssi = 0;
 static int8_t rf_radio_driver_id = -1;
 static phy_device_driver_s device_driver;
 static uint8_t atmel_MAC[8] = {1, 2, 3, 4, 5, 6, 7, 8};
-static phy_device_channel_info_s channel_info;
 static uint8_t mac_tx_handle = 0;
 static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_t rf_channel);
 static int8_t rf_extension(phy_extension_type_e extension_type,uint8_t *data_ptr);
 static int8_t rf_address_write(phy_address_type_e address_type,uint8_t *address_ptr);
+
+/* Channel configurations for 2.4 and sub-GHz */
+const phy_rf_channel_configuration_s phy_24ghz = {2405000000, 5000000, 250000, 16, M_OQPSK};
+const phy_rf_channel_configuration_s phy_subghz = {868300000, 2000000, 250000, 11, M_OQPSK};
+
+const phy_device_channel_page_s phy_channel_pages[] = {
+        { CHANNEL_PAGE_0, &phy_24ghz},
+        { CHANNEL_PAGE_2, &phy_subghz},
+        { CHANNEL_PAGE_0, NULL}
+};
 
 /*
  * \brief Function sets given RF flag on.
@@ -119,23 +128,13 @@ int8_t rf_device_register(void)
         //Create setup Used Radio chips
         if(radio_type == ATMEL_AT86RF212)
         {
-            /*Number of channels in PHY*/
-            channel_info.channel_count = 11;
-            /*Channel mask 0-10*/
-            channel_info.channel_mask = 0x000007ff;
-            /*Type of RF PHY is SubGHz*/
             device_driver.link_type = PHY_LINK_15_4_SUBGHZ_TYPE;
         }
         else
         {
-            /*Number of channels in PHY*/
-            channel_info.channel_count = 16;
-            /*Channel mask 26-11*/
-            channel_info.channel_mask = 0x07FFF800;
-            /*Type of RF PHY is SubGHz*/
             device_driver.link_type = PHY_LINK_15_4_2_4GHZ_TYPE;
         }
-        device_driver.link_channel_info = &channel_info;
+        device_driver.phy_channel_pages = phy_channel_pages;
         /*Maximum size of payload is 127*/
         device_driver.phy_MTU = 127;
         /*No header in PHY*/
