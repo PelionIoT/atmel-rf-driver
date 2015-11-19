@@ -130,6 +130,53 @@ extern "C" {
 /*XAH_CTRL_1 bits*/
 #define AACK_PROM_MODE	0x02
 
+/* 
+ * Default interface pins definition. 
+ * Can be redefined using a config.json file or the config section of the used target
+ * using the following structure and changing the "spi" section.
+ *
+ * "atmel": {
+ *    "rf": {
+ *      "spi": {
+ *        "mosi": "",
+ *        "miso": "",
+ *        "sclk": "",
+ *        "cs": "",
+ *        "rst": "",
+ *        "slp": "",
+ *        "irq": ""
+ *      },
+ *      "i2c": {
+ *    	  "sda": "", 
+ *    	  "scl": "" 
+ *      }
+ *    }
+ *  }
+ */
+ 
+#ifndef YOTTA_CFG_ATMEL_RF_SPI_MOSI
+#define YOTTA_CFG_ATMEL_RF_SPI_MOSI D11
+#endif
+#ifndef YOTTA_CFG_ATMEL_RF_SPI_MISO
+#define YOTTA_CFG_ATMEL_RF_SPI_MISO D12
+#endif
+#ifndef YOTTA_CFG_ATMEL_RF_SPI_SCLK
+#define YOTTA_CFG_ATMEL_RF_SPI_SCLK D13
+#endif
+#ifndef YOTTA_CFG_ATMEL_RF_SPI_CS
+#define YOTTA_CFG_ATMEL_RF_SPI_CS D10
+#endif
+#ifndef YOTTA_CFG_ATMEL_RF_SPI_RST
+#define YOTTA_CFG_ATMEL_RF_SPI_RST D5
+#endif
+#ifndef YOTTA_CFG_ATMEL_RF_SPI_SLP
+#define YOTTA_CFG_ATMEL_RF_SPI_SLP D7
+#endif
+#ifndef YOTTA_CFG_ATMEL_RF_SPI_IRQ
+#define YOTTA_CFG_ATMEL_RF_SPI_IRQ D9
+#endif
+
+
 void rf_if_cca_timer_start(uint32_t slots);
 void rf_if_enable_promiscuous_mode(void);
 

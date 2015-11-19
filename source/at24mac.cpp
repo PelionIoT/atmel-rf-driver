@@ -30,7 +30,7 @@
 #define EUI64_LEN 8
 #define EUI48_LEN 6
 
-I2C i2c(I2C_SDA, I2C_SCL);
+I2C i2c(YOTTA_CFG_ATMEL_RF_I2C_SDA, YOTTA_CFG_ATMEL_RF_I2C_SCL);
 
 /**
  * Read unique serial number from chip.

@@ -21,11 +21,14 @@
 
 // HW pins to RF chip
 #define SPI_SPEED 7500000
-static SPI spi(D11, D12, D13);
-static DigitalOut RF_CS(D10);
-static DigitalOut RF_RST(D5);
-static DigitalOut RF_SLP_TR(D7);
-static InterruptIn RF_IRQ(D9);
+
+static SPI spi(YOTTA_CFG_ATMEL_RF_SPI_MOSI,
+		       YOTTA_CFG_ATMEL_RF_SPI_MISO,
+			   YOTTA_CFG_ATMEL_RF_SPI_SCLK);
+static DigitalOut RF_CS(YOTTA_CFG_ATMEL_RF_SPI_CS);
+static DigitalOut RF_RST(YOTTA_CFG_ATMEL_RF_SPI_RST);
+static DigitalOut RF_SLP_TR(YOTTA_CFG_ATMEL_RF_SPI_SLP);
+static InterruptIn RF_IRQ(YOTTA_CFG_ATMEL_RF_SPI_IRQ);
 
 static Timeout ack_timer;
 static Timeout cal_timer;

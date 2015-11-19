@@ -28,6 +28,37 @@
  * NOTE: You cannot use both EUI-64 and EUI-48. Chip contains only one of those.
  */
 
+/* 
+ * Default interface pins definition. 
+ * Can be redefined using a config.json file or the config section of the used target
+ * using the following structure and changing the "i2c" section.
+ *
+ * "atmel": {
+ *    "rf": {
+ *      "spi": {
+ *        "mosi": "",
+ *        "miso": "",
+ *        "sclk": "",
+ *        "cs": "",
+ *        "rst": "",
+ *        "slp": "",
+ *        "irq": ""
+ *      },
+ *      "i2c": {
+ *    	  "sda": "", 
+ *    	  "scl": "" 
+ *      }
+ *    }
+ *  }
+ */
+ 
+#ifndef YOTTA_CFG_ATMEL_RF_I2C_SDA
+#define YOTTA_CFG_ATMEL_RF_I2C_SDA D14
+#endif
+#ifndef YOTTA_CFG_ATMEL_RF_I2C_SCL
+#define YOTTA_CFG_ATMEL_RF_I2C_SCL D15
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
