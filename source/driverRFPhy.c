@@ -110,7 +110,7 @@ void rf_flags_reset(void)
  *
  * \return rf_radio_driver_id Driver ID given by NET library
  */
-int8_t rf_device_register(void)
+int8_t rf_device_register(channel_page_e rf_channel_page)
 {
     rf_trx_part_e radio_type;
 

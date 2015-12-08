@@ -107,7 +107,7 @@ extern void rf_receive(void);
 extern void rf_poll_trx_state_change(rf_trx_states_t trx_state);
 extern void rf_init(void);
 extern void rf_set_mac_address(const uint8_t *ptr);
-extern int8_t rf_device_register(void);
+extern int8_t rf_device_register(channel_page_e rf_channel_page);
 extern int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, data_protocol_e data_protocol );
 extern void rf_cca_abort(void);
 extern void rf_read_mac_address(uint8_t *ptr);
