@@ -13,14 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef AT2MAC_H
+#ifndef AT24MAC_H
 #define AT24MAC_H
 
 /*
  * AT24MAC drivers.
  *
  * This is a EEPROM chip designed to contain factory programmed read-only EUI-64 or EUI-48,
- * a 128bit serial number and some user probrammable EEPROM.
+ * a 128bit serial number and some user programmable EEPROM.
  *
  * AT24MAC602 contains EUI-64, use at24mac_read_eui64()
  * AT24MAC402 contains EUI-64, use at24mac_read_eui48()
