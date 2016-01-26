@@ -24,7 +24,7 @@
 /* Known memory blocks */
 #define AT24MAC_SERIAL_OFFSET	(0x80)
 #define AT24MAC_EUI64_OFFSET	(0x98)
-#define AT24MAC_EUI48_OFFSET	(0x98)
+#define AT24MAC_EUI48_OFFSET	(0x9A)
 
 #define SERIAL_LEN 16
 #define EUI64_LEN 8
