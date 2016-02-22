@@ -28,7 +28,7 @@ static uint16_t rf_ack_wait_duration = RF_ACK_WAIT_DEFAULT_TIMEOUT;
 
 static int8_t rf_sensitivity = RF_DEFAULT_SENSITIVITY;
 static uint8_t rf_mode = RF_MODE_NORMAL;
-static uint8_t radio_tx_power = 0x07;
+static uint8_t radio_tx_power = 0x00;   // Default to +4dBm
 static uint8_t rf_phy_channel = 12;
 static uint8_t rf_tuned = 1;
 static uint8_t rf_use_antenna_diversity = 0;
