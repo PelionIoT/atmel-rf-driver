@@ -50,7 +50,13 @@ static void delay_ns(uint32_t ns)
   uint32_t ticks_per_us = ((SystemCoreClock/1000)/1000);
   uint32_t ticks = (ticks_per_us * ns + 500) / 1000; // Round up to next tick value before dividing
   while(ticks--)
+  {
+#if defined(__CC_ARM)
+    __nop();
+#else
     __asm__ volatile ("nop");
+#endif
+  }
 }
 
 #define CS_SELECT()  {RF_CS = 0; delay_ns(180);} // t1 = 180ns, SEL falling edge to MISO active
