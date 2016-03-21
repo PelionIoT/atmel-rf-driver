@@ -51,8 +51,10 @@ extern "C" {
 #define RF_CALIBRATION_INTERVAL 6000000
 /*Wait ACK for 2.5ms*/
 #define RF_ACK_WAIT_DEFAULT_TIMEOUT 50
-/*CCA Timeout*/
-#define RF_CCA_TIMEOUT  15
+/*Base CCA backoff (50us units) - substitutes for Inter-Frame Spacing*/
+#define RF_CCA_BASE_BACKOFF 13 /* 650us */
+/*CCA random backoff (50us units)*/
+#define RF_CCA_RANDOM_BACKOFF 51 /* 2550us */
 
 #define RF_BUFFER_SIZE 128
 

@@ -545,7 +545,7 @@ int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, 
         rf_if_write_frame_buffer(data_ptr, (uint8_t)data_length);
         rf_flags_set(RFF_CCA);
         /*Start CCA timeout*/
-        rf_cca_timer_start(RF_CCA_TIMEOUT);
+        rf_cca_timer_start(RF_CCA_BASE_BACKOFF + randLIB_get_random_in_range(0, RF_CCA_RANDOM_BACKOFF));
         /*Store TX handle*/
         mac_tx_handle = tx_handle;
         platform_exit_critical();
