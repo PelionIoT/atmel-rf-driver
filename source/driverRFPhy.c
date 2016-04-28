@@ -19,6 +19,7 @@
 #include "atmel-rf-driver/driverRFPhy.h"
 #include "driverAtmelRFInterface.h"
 #include <string.h>
+#include "randLIB.h"
 #include "at24mac.h"
 
 /*RF receive buffer*/
@@ -974,7 +975,6 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
             break;
         /*Enable PHY Interface driver*/
         case PHY_INTERFACE_UP:
-            rf_set_address(atmel_MAC);
             rf_channel_set(rf_channel);
             rf_receive();
             break;
