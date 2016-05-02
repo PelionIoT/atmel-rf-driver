@@ -19,6 +19,7 @@
 #include "atmel-rf-driver/driverRFPhy.h"
 #include "driverAtmelRFInterface.h"
 #include <string.h>
+#include "randLIB.h"
 #include "at24mac.h"
 
 /*RF receive buffer*/
@@ -149,6 +150,9 @@ int8_t rf_device_register(void)
         device_driver.state_control = &rf_interface_state_control;
         /*Set transmit function*/
         device_driver.tx = &rf_start_cca;
+        /*NULLIFY rx and tx_done callbacks*/
+        device_driver.phy_rx_cb = NULL;
+        device_driver.phy_tx_done_cb = NULL;
         /*Register device driver*/
         rf_radio_driver_id = arm_net_phy_register(&device_driver);
     }
@@ -214,7 +218,9 @@ void rf_cca_timer_interrupt(void)
     /*Start CCA process*/
     if(rf_if_read_trx_state() == BUSY_RX_AACK)
     {
-        arm_net_phy_tx_done(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 1, 1);
+        if(device_driver.phy_tx_done_cb){
+            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 1, 1);
+        }
     }
     else
     {
@@ -334,7 +340,8 @@ void rf_set_short_adr(uint8_t * short_address)
     uint8_t rf_off_flag = 0;
     platform_enter_critical();
     /*Wake up RF if sleeping*/
-    if(rf_if_read_trx_state() == 0x00 || rf_if_read_trx_state() == 0x1F)
+    uint8_t state = rf_if_read_trx_state();
+    if(state == 0x00 || state == 0x1F)
     {
         rf_if_disable_slptr();
         rf_off_flag = 1;
@@ -360,8 +367,9 @@ void rf_set_pan_id(uint8_t *pan_id)
     uint8_t rf_off_flag = 0;
 
     platform_enter_critical();
+    uint8_t state = rf_if_read_trx_state();
     /*Wake up RF if sleeping*/
-    if(rf_if_read_trx_state() == 0x00 || rf_if_read_trx_state() == 0x1F)
+    if(state == 0x00 || state == 0x1F)
     {
         rf_if_disable_slptr();
         rf_off_flag = 1;
@@ -388,7 +396,8 @@ void rf_set_address(uint8_t *address)
 
     platform_enter_critical();
     /*Wake up RF if sleeping*/
-    if(rf_if_read_trx_state() == 0x00 || rf_if_read_trx_state() == 0x1F)
+    uint8_t state = rf_if_read_trx_state();
+    if(state == 0x00 || state == 0x1F)
     {
         rf_if_disable_slptr();
         rf_off_flag = 1;
@@ -583,7 +592,9 @@ void rf_start_tx(void)
     uint8_t trx_state = rf_if_read_trx_state();
     if(trx_state != RX_AACK_ON)
     {
-        arm_net_phy_tx_done(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 1, 1);
+        if(device_driver.phy_tx_done_cb){
+            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 1, 1);
+        }
     }
     else
     {
@@ -625,7 +636,8 @@ void rf_receive(void)
         }
         //TODO: rf_if_delay_function(50);
         /*Wake up from sleep state*/
-        if(rf_if_read_trx_state() == 0x00 || rf_if_read_trx_state() == 0x1f)
+        uint8_t state = rf_if_read_trx_state();
+        if(state == 0x00 || state == 0x1f)
         {
             rf_if_disable_slptr();
             rf_poll_trx_state_change(TRX_OFF);
@@ -744,7 +756,9 @@ void rf_handle_ack(uint8_t seq_number, uint8_t data_pending)
         else
             phy_status = PHY_LINK_TX_DONE;
         /*Call PHY TX Done API*/
-        arm_net_phy_tx_done(rf_radio_driver_id, mac_tx_handle,phy_status, 1, 1);
+        if(device_driver.phy_tx_done_cb){
+            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle,phy_status, 1, 1);
+        }
     }
     platform_exit_critical();
 }
@@ -797,7 +811,9 @@ void rf_handle_rx_end(void)
                 }
                 if(rf_mode == RF_MODE_SNIFFER)
                 {
-                    arm_net_phy_rx(PHY_LAYER_PAYLOAD,rf_buffer,len - 2, rf_lqi, rf_rssi, rf_radio_driver_id);
+                    if( device_driver.phy_rx_cb ){
+                        device_driver.phy_rx_cb(rf_buffer,len - 2, rf_lqi, rf_rssi, rf_radio_driver_id);
+                    }
                 }
                 else
                 {
@@ -815,7 +831,9 @@ void rf_handle_rx_end(void)
                     }
                     else
                     {
-                        arm_net_phy_rx(PHY_LAYER_PAYLOAD,rf_buffer,len - 2, rf_lqi, rf_rssi, rf_radio_driver_id);
+                        if( device_driver.phy_rx_cb ){
+                            device_driver.phy_rx_cb(rf_buffer,len - 2, rf_lqi, rf_rssi, rf_radio_driver_id);
+                        }
                     }
                 }
             }
@@ -861,7 +879,9 @@ void rf_handle_tx_end(void)
     rf_receive();
 
     /*Call PHY TX Done API*/
-    arm_net_phy_tx_done(rf_radio_driver_id, mac_tx_handle, phy_status, 1, 1);
+    if(device_driver.phy_tx_done_cb){
+        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, phy_status, 1, 1);
+    }
 }
 
 /*
@@ -882,7 +902,9 @@ void rf_handle_cca_ed_done(void)
     else
     {
         /*Send CCA fail notification*/
-        arm_net_phy_tx_done(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 1, 1);
+        if(device_driver.phy_tx_done_cb){
+            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 1, 1);
+        }
     }
 }
 
@@ -960,7 +982,6 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
         case PHY_INTERFACE_RX_ENERGY_STATE:
             break;
         case PHY_INTERFACE_SNIFFER_STATE:             /**< Enable Sniffer state */
-
             rf_mode = RF_MODE_SNIFFER;
             rf_channel_set(rf_channel);
             rf_flags_clear(RFF_RX);
