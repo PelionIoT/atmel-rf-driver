@@ -47,10 +47,10 @@ static int8_t rf_extension(phy_extension_type_e extension_type,uint8_t *data_ptr
 static int8_t rf_address_write(phy_address_type_e address_type,uint8_t *address_ptr);
 
 /* Channel configurations for 2.4 and sub-GHz */
-const phy_rf_channel_configuration_s phy_24ghz = {2405000000, 5000000, 250000, 16, M_OQPSK};
-const phy_rf_channel_configuration_s phy_subghz = {868300000, 2000000, 250000, 11, M_OQPSK};
+static const phy_rf_channel_configuration_s phy_24ghz = {2405000000, 5000000, 250000, 16, M_OQPSK};
+static const phy_rf_channel_configuration_s phy_subghz = {868300000, 2000000, 250000, 11, M_OQPSK};
 
-const phy_device_channel_page_s phy_channel_pages[] = {
+static const phy_device_channel_page_s phy_channel_pages[] = {
         { CHANNEL_PAGE_0, &phy_24ghz},
         { CHANNEL_PAGE_2, &phy_subghz},
         { CHANNEL_PAGE_0, NULL}
