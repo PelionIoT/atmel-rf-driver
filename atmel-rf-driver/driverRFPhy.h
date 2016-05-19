@@ -65,6 +65,7 @@ extern "C" {
 #define RFF_RX 0x02
 #define RFF_TX 0x04
 #define RFF_CCA 0x08
+#define RFF_SLP 0x10
 
 #define RF_MODE_NORMAL  0
 #define RF_MODE_SNIFFER 1

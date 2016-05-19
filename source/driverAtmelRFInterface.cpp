@@ -84,8 +84,10 @@ static void delay_ns(uint32_t ns)
   delay_loop(count);
 }
 
-#define CS_SELECT()  {RF_CS = 0; delay_ns(180);} // t1 = 180ns, SEL falling edge to MISO active
-#define CS_RELEASE() {RF_CS = 1; delay_ns(250);} // t8 = 250ns, SPI idle time between consecutive access
+// t1 = 180ns, SEL falling edge to MISO active [SPI setup assumed slow enough to not need manual delay]
+#define CS_SELECT()  {RF_CS = 0; /* delay_ns(180); */} 
+ // t9 = 250ns, last clock to SEL rising edge, t8 = 250ns, SPI idle time between consecutive access
+#define CS_RELEASE() {delay_ns(250); RF_CS = 1; delay_ns(250);}
 
 /*
  * \brief Read connected radio part.
@@ -906,6 +908,7 @@ uint8_t rf_if_spi_exchange(uint8_t out)
   uint8_t v;
   v = spi.write(out);
   // t9 = t5 = 250ns, delay between LSB of last byte to next MSB or delay between LSB & SEL rising
-  delay_ns(250);
+  // [SPI setup assumed slow enough to not need manual delay]
+  // delay_ns(250);
   return v;
 }
