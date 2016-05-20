@@ -331,20 +331,20 @@ void rf_write_settings(void)
  */
 void rf_set_short_adr(uint8_t * short_address)
 {
-    uint8_t rf_off_flag = 0;
     platform_enter_critical();
     /*Wake up RF if sleeping*/
-    if(rf_if_read_trx_state() == 0x00 || rf_if_read_trx_state() == 0x1F)
+    if(rf_flags_check(RFF_ON) == 0)
     {
         rf_if_disable_slptr();
-        rf_off_flag = 1;
         rf_poll_trx_state_change(TRX_OFF);
     }
     /*Write address filter registers*/
     rf_if_write_short_addr_registers(short_address);
     /*RF back to sleep*/
-    if(rf_off_flag)
+    if(rf_flags_check(RFF_ON) == 0)
+    {
         rf_if_enable_slptr();
+    }
     platform_exit_critical();
 }
 
@@ -357,21 +357,20 @@ void rf_set_short_adr(uint8_t * short_address)
  */
 void rf_set_pan_id(uint8_t *pan_id)
 {
-    uint8_t rf_off_flag = 0;
-
     platform_enter_critical();
     /*Wake up RF if sleeping*/
-    if(rf_if_read_trx_state() == 0x00 || rf_if_read_trx_state() == 0x1F)
+    if(rf_flags_check(RFF_ON) == 0)
     {
         rf_if_disable_slptr();
-        rf_off_flag = 1;
         rf_poll_trx_state_change(TRX_OFF);
     }
     /*Write address filter registers*/
     rf_if_write_pan_id_registers(pan_id);
     /*RF back to sleep*/
-    if(rf_off_flag)
+    if(rf_flags_check(RFF_ON) == 0)
+    {
         rf_if_enable_slptr();
+    }
     platform_exit_critical();
 }
 
@@ -384,22 +383,20 @@ void rf_set_pan_id(uint8_t *pan_id)
  */
 void rf_set_address(uint8_t *address)
 {
-    uint8_t rf_off_flag = 0;
-
     platform_enter_critical();
     /*Wake up RF if sleeping*/
-    if(rf_if_read_trx_state() == 0x00 || rf_if_read_trx_state() == 0x1F)
+    if(rf_flags_check(RFF_ON) == 0)
     {
         rf_if_disable_slptr();
-        rf_off_flag = 1;
         rf_poll_trx_state_change(TRX_OFF);
     }
     /*Write address filter registers*/
     rf_if_write_ieee_addr_registers(address);
     /*RF back to sleep*/
-    if(rf_off_flag)
+    if(rf_flags_check(RFF_ON) == 0)
+    {
         rf_if_enable_slptr();
-
+    }
     platform_exit_critical();
 }
 
@@ -460,6 +457,7 @@ void rf_off(void)
 {
     if(rf_flags_check(RFF_ON))
     {
+        platform_enter_critical();
         rf_cca_abort();
         uint16_t while_counter = 0;
         /*Wait while receiving*/
@@ -476,11 +474,15 @@ void rf_off(void)
         }
         rf_if_change_trx_state(TRX_OFF);
         rf_if_enable_slptr();
-        rf_flags_clear(~RFF_ON);
+
         /*Disable Antenna Diversity*/
         if(rf_use_antenna_diversity)
             rf_if_disable_ant_div();
+        platform_exit_critical();
     }
+
+    /*Clears all flags*/
+    rf_flags_reset();
 }
 
 /*
@@ -623,13 +625,6 @@ void rf_receive(void)
                 break;
             }
         }
-        //TODO: rf_if_delay_function(50);
-        /*Wake up from sleep state*/
-        if(rf_if_read_trx_state() == 0x00 || rf_if_read_trx_state() == 0x1f)
-        {
-            rf_if_disable_slptr();
-            rf_poll_trx_state_change(TRX_OFF);
-        }
 
         rf_if_change_trx_state(PLL_ON);
 
@@ -714,11 +709,17 @@ void rf_on(void)
     /*Set RFF_ON flag*/
     if(rf_flags_check(RFF_ON) == 0)
     {
+        platform_enter_critical();
         rf_flags_set(RFF_ON);
         /*Enable Antenna diversity*/
         if(rf_use_antenna_diversity)
             /*Set ANT_EXT_SW_EN to enable controlling of antenna diversity*/
             rf_if_enable_ant_div();
+
+        /*Wake up from sleep state*/
+        rf_if_disable_slptr();
+        rf_poll_trx_state_change(TRX_OFF);
+        platform_exit_critical();
     }
 }
 
@@ -834,8 +835,6 @@ void rf_shutdown(void)
 {
     /*Call RF OFF*/
     rf_off();
-    /*Clear RF flags*/
-    rf_flags_reset();
 }
 
 /*
