@@ -53,6 +53,18 @@ __asm static void delay_loop(uint32_t count)
   BCS  %BT1
   BX   lr
 }
+#elif defined (__ICCARM__)
+static void delay_loop(uint32_t count)
+{
+  __asm volatile(
+    "loop: \n"
+    " SUBS %0, %0, #1 \n"
+    " BCS  loop\n"
+    : "+r" (count)
+    :
+    : "cc"
+  );
+}
 #else // GCC
 static void delay_loop(uint32_t count)
 {
