@@ -59,7 +59,7 @@ static void delay_loop(uint32_t count)
   __asm volatile(
     "loop: \n"
     " SUBS %0, %0, #1 \n"
-    " BCS  loop\n"
+    " BCS.n  loop\n"
     : "+r" (count)
     :
     : "cc"
