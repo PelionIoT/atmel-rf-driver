@@ -22,6 +22,8 @@
 #include "randLIB.h"
 #include "at24mac.h"
 
+#ifdef YOTTA_CFG_ATMEL_RF_SPI_MOSI
+
 /*RF receive buffer*/
 static uint8_t rf_buffer[RF_BUFFER_SIZE];
 /*ACK wait duration changes depending on data rate*/
@@ -1258,3 +1260,5 @@ uint8_t rf_scale_lqi(int8_t rssi)
 
     return scaled_lqi;
 }
+
+#endif //YOTTA_CFG_ATMEL_RF_SPI_MOSI

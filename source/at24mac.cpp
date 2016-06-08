@@ -16,6 +16,8 @@
 #include "at24mac.h"
 #include "mbed-drivers/mbed.h"
 
+#ifdef YOTTA_CFG_ATMEL_RF_I2C_SDA
+
 /* Device addressing */
 #define AT24MAC_EEPROM_ADDRESS		(0x0A<<4)
 #define AT24MAC_RW_PROTECT_ADDRESS	(0x06<<4)
@@ -70,3 +72,6 @@ extern "C" int at24mac_read_eui48(void *buf)
 		return -1; //No ACK
 	return i2c.read(AT24MAC_SERIAL_ADDRESS, (char*)buf, EUI48_LEN);
 }
+
+#endif // YOTTA_CFG_ATMEL_RF_I2C_SDA
+

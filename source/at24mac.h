@@ -51,13 +51,15 @@
  *    }
  *  }
  */
- 
+
+#if defined TARGET_FF_ARDUINO || defined YOTTA_CFG
 #ifndef YOTTA_CFG_ATMEL_RF_I2C_SDA
 #define YOTTA_CFG_ATMEL_RF_I2C_SDA D14
 #endif
 #ifndef YOTTA_CFG_ATMEL_RF_I2C_SCL
 #define YOTTA_CFG_ATMEL_RF_I2C_SCL D15
 #endif
+#endif //TARGET_FF_ARDUINO
 
 #ifdef __cplusplus
 extern "C" {
