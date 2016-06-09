@@ -24,6 +24,22 @@
 // form factors, or if manually configured.
 #ifdef YOTTA_CFG_ATMEL_RF_SPI_MOSI
 
+#ifdef MBED_CONF_RTOS_PRESENT
+#include "Mutex.h"
+#include "Thread.h"
+using namespace rtos;
+
+static void rf_if_irq_task_process_irq();
+
+#define SIG_RADIO       1
+#define SIG_TIMER_ACK   2
+#define SIG_TIMER_CAL   4
+#define SIG_TIMER_CCA   8
+
+#define SIG_TIMERS (SIG_TIMER_ACK|SIG_TIMER_CAL|SIG_TIMER_CCA)
+#define SIG_ALL (SIG_RADIO|SIG_TIMERS)
+#endif
+
 // HW pins to RF chip
 #define SPI_SPEED 7500000
 
@@ -37,6 +53,11 @@ struct RFBits {
     Timeout ack_timer;
     Timeout cal_timer;
     Timeout cca_timer;
+#ifdef MBED_CONF_RTOS_PRESENT
+    Thread irq_thread;
+    Mutex mutex;
+    void rf_if_irq_task();
+#endif
 };
 
 RFBits::RFBits() :
@@ -46,7 +67,13 @@ spi(YOTTA_CFG_ATMEL_RF_SPI_MOSI,
 CS(YOTTA_CFG_ATMEL_RF_SPI_CS),
 RST(YOTTA_CFG_ATMEL_RF_SPI_RST),
 SLP_TR(YOTTA_CFG_ATMEL_RF_SPI_SLP),
-IRQ(YOTTA_CFG_ATMEL_RF_SPI_IRQ) { }
+IRQ(YOTTA_CFG_ATMEL_RF_SPI_IRQ)
+#ifdef MBED_CONF_RTOS_PRESENT
+,irq_thread(osPriorityRealtime, 1024)
+#endif
+{
+    irq_thread.start(this, &RFBits::rf_if_irq_task);
+}
 
 void (*app_rf_settings_cb)(void) = 0;
 static RFBits *rf;
@@ -68,6 +95,24 @@ void rf_if_unlock(void)
 {
     platform_exit_critical();
 }
+
+#ifdef MBED_CONF_RTOS_PRESENT
+static void rf_if_cca_timer_signal(void)
+{
+    rf->irq_thread.signal_set(SIG_TIMER_CCA);
+}
+
+static void rf_if_cal_timer_signal(void)
+{
+    rf->irq_thread.signal_set(SIG_TIMER_CAL);
+}
+
+static void rf_if_ack_timer_signal(void)
+{
+    rf->irq_thread.signal_set(SIG_TIMER_ACK);
+}
+#endif
+
 
 /* Delay functions for RF Chip SPI access */
 #ifdef __CC_ARM
@@ -166,7 +211,11 @@ rf_trx_part_e rf_radio_type_read(void)
  */
 void rf_if_ack_wait_timer_start(uint16_t slots)
 {
+#ifdef MBED_CONF_RTOS_PRESENT
+  rf->ack_timer.attach(rf_if_ack_timer_signal, slots*50e-6);
+#else
   rf->ack_timer.attach(rf_ack_wait_timer_interrupt, slots*50e-6);
+#endif
 }
 
 /*
@@ -178,7 +227,11 @@ void rf_if_ack_wait_timer_start(uint16_t slots)
  */
 void rf_if_calibration_timer_start(uint32_t slots)
 {
+#ifdef MBED_CONF_RTOS_PRESENT
+  rf->cal_timer.attach(rf_if_cal_timer_signal, slots*50e-6);
+#else
   rf->cal_timer.attach(rf_calibration_timer_interrupt, slots*50e-6);
+#endif
 }
 
 /*
@@ -190,7 +243,11 @@ void rf_if_calibration_timer_start(uint32_t slots)
  */
 void rf_if_cca_timer_start(uint32_t slots)
 {
+#ifdef MBED_CONF_RTOS_PRESENT
+  rf->cca_timer.attach(rf_if_cca_timer_signal, slots*50e-6);
+#else
   rf->cca_timer.attach(rf_cca_timer_interrupt, slots*50e-6);
+#endif
 }
 
 /*
@@ -337,7 +394,9 @@ uint8_t rf_if_read_register(uint8_t addr)
  */
 void rf_if_reset_radio(void)
 {
-  if (!rf) rf = new RFBits;
+  if (!rf) {
+      rf = new RFBits;
+  }
   rf->spi.frequency(SPI_SPEED);
   rf->IRQ.rise(0);
   rf->RST = 1;
@@ -887,6 +946,40 @@ void rf_if_set_channel_register(uint8_t channel)
   rf_if_set_bit(PHY_CC_CCA, channel, 0x1f);
 }
 
+#ifdef MBED_CONF_RTOS_PRESENT
+void rf_if_interrupt_handler(void)
+{
+    rf->irq_thread.signal_set(SIG_RADIO);
+}
+
+// Started during construction of rf, so variable
+// rf isn't set at the start. Uses 'this' instead.
+void RFBits::rf_if_irq_task(void)
+{
+    for (;;) {
+        osEvent event = irq_thread.signal_wait(0);
+        if (event.status != osEventSignal) {
+            continue;
+        }
+        rf_if_lock();
+        if (event.value.signals & SIG_RADIO) {
+            rf_if_irq_task_process_irq();
+        }
+        if (event.value.signals & SIG_TIMER_ACK) {
+            rf_ack_wait_timer_interrupt();
+        }
+        if (event.value.signals & SIG_TIMER_CCA) {
+            rf_cca_timer_interrupt();
+        }
+        if (event.value.signals & SIG_TIMER_CAL) {
+            rf_calibration_timer_interrupt();
+        }
+        rf_if_unlock();
+    }
+}
+
+static void rf_if_irq_task_process_irq(void)
+#else
 /*
  * \brief Function is a RF interrupt vector. End of frame in RX and TX are handled here as well as CCA process interrupt.
  *
@@ -895,6 +988,7 @@ void rf_if_set_channel_register(uint8_t channel)
  * \return none
  */
 void rf_if_interrupt_handler(void)
+#endif
 {
   uint8_t irq_status;
 
