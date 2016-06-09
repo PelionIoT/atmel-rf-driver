@@ -59,6 +59,16 @@ static int8_t rf_rssi_base_val = -91;
 
 static uint8_t rf_if_spi_exchange(uint8_t out);
 
+void rf_if_lock(void)
+{
+    platform_enter_critical();
+}
+
+void rf_if_unlock(void)
+{
+    platform_exit_critical();
+}
+
 /* Delay functions for RF Chip SPI access */
 #ifdef __CC_ARM
 __asm static void delay_loop(uint32_t count)
@@ -290,12 +300,12 @@ void rf_if_clear_bit(uint8_t addr, uint8_t bit)
 void rf_if_write_register(uint8_t addr, uint8_t data)
 {
   uint8_t cmd = 0xC0;
-  platform_enter_critical();
+  rf_if_lock();
   CS_SELECT();
   rf_if_spi_exchange(cmd | addr);
   rf_if_spi_exchange(data);
   CS_RELEASE();
-  platform_exit_critical();
+  rf_if_unlock();
 }
 
 /*
@@ -309,12 +319,12 @@ uint8_t rf_if_read_register(uint8_t addr)
 {
   uint8_t cmd = 0x80;
   uint8_t data;
-  platform_enter_critical();
+  rf_if_lock();
   CS_SELECT();
   rf_if_spi_exchange(cmd | addr);
   data = rf_if_spi_exchange(0);
   CS_RELEASE();
-  platform_exit_critical();
+  rf_if_unlock();
   return data;
 }
 
@@ -599,7 +609,7 @@ void rf_if_write_short_addr_registers(uint8_t *short_address)
  */
 void rf_if_ack_pending_ctrl(uint8_t state)
 {
-  platform_enter_critical();
+  rf_if_lock();
   if(state)
   {
     rf_if_set_bit(CSMA_SEED_1, (1 << AACK_SET_PD), (1 << AACK_SET_PD));
@@ -608,7 +618,7 @@ void rf_if_ack_pending_ctrl(uint8_t state)
   {
     rf_if_clear_bit(CSMA_SEED_1, (1 << AACK_SET_PD));
   }
-  platform_exit_critical();
+  rf_if_unlock();
 }
 
 /*
@@ -736,11 +746,11 @@ uint8_t rf_if_read_rnd(void)
  */
 void rf_if_change_trx_state(rf_trx_states_t trx_state)
 {
-  platform_enter_critical();
+  rf_if_lock();
   rf_if_write_register(TRX_STATE, trx_state);
   /*Wait while not in desired state*/
   rf_poll_trx_state_change(trx_state);
-  platform_exit_critical();
+  rf_if_unlock();
 }
 
 /*

@@ -181,6 +181,8 @@ extern "C" {
 void rf_if_cca_timer_start(uint32_t slots);
 void rf_if_enable_promiscuous_mode(void);
 
+void rf_if_lock(void);
+void rf_if_unlock(void);
 
 extern uint8_t rf_if_read_rnd(void);
 extern void rf_if_calibration_timer_start(uint32_t slots);
