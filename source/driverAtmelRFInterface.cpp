@@ -19,22 +19,37 @@
 #include "driverAtmelRFInterface.h"
 #include "mbed-drivers/mbed.h"
 
+// Pending better config support, we gate compilation
+// on this being defined. Which will be for Arduino
+// form factors, or if manually configured.
+#ifdef YOTTA_CFG_ATMEL_RF_SPI_MOSI
+
 // HW pins to RF chip
 #define SPI_SPEED 7500000
 
-static SPI spi(YOTTA_CFG_ATMEL_RF_SPI_MOSI,
-               YOTTA_CFG_ATMEL_RF_SPI_MISO,
-               YOTTA_CFG_ATMEL_RF_SPI_SCLK);
-static DigitalOut RF_CS(YOTTA_CFG_ATMEL_RF_SPI_CS);
-static DigitalOut RF_RST(YOTTA_CFG_ATMEL_RF_SPI_RST);
-static DigitalOut RF_SLP_TR(YOTTA_CFG_ATMEL_RF_SPI_SLP);
-static InterruptIn RF_IRQ(YOTTA_CFG_ATMEL_RF_SPI_IRQ);
+struct RFBits {
+    RFBits();
+    SPI spi;
+    DigitalOut CS;
+    DigitalOut RST;
+    DigitalOut SLP_TR;
+    InterruptIn IRQ;
+    Timeout ack_timer;
+    Timeout cal_timer;
+    Timeout cca_timer;
+};
 
-static Timeout ack_timer;
-static Timeout cal_timer;
-static Timeout cca_timer;
+RFBits::RFBits() :
+spi(YOTTA_CFG_ATMEL_RF_SPI_MOSI,
+    YOTTA_CFG_ATMEL_RF_SPI_MISO,
+    YOTTA_CFG_ATMEL_RF_SPI_SCLK),
+CS(YOTTA_CFG_ATMEL_RF_SPI_CS),
+RST(YOTTA_CFG_ATMEL_RF_SPI_RST),
+SLP_TR(YOTTA_CFG_ATMEL_RF_SPI_SLP),
+IRQ(YOTTA_CFG_ATMEL_RF_SPI_IRQ) { }
 
 void (*app_rf_settings_cb)(void) = 0;
+static RFBits *rf;
 static uint8_t rf_part_num = 0;
 static uint8_t rf_rx_lqi;
 static int8_t rf_rx_rssi;
@@ -97,9 +112,9 @@ static void delay_ns(uint32_t ns)
 }
 
 // t1 = 180ns, SEL falling edge to MISO active [SPI setup assumed slow enough to not need manual delay]
-#define CS_SELECT()  {RF_CS = 0; /* delay_ns(180); */} 
+#define CS_SELECT()  {rf->CS = 0; /* delay_ns(180); */}
  // t9 = 250ns, last clock to SEL rising edge, t8 = 250ns, SPI idle time between consecutive access
-#define CS_RELEASE() {delay_ns(250); RF_CS = 1; delay_ns(250);}
+#define CS_RELEASE() {delay_ns(250); rf->CS = 1; delay_ns(250);}
 
 /*
  * \brief Read connected radio part.
@@ -141,7 +156,7 @@ rf_trx_part_e rf_radio_type_read(void)
  */
 void rf_if_ack_wait_timer_start(uint16_t slots)
 {
-  ack_timer.attach(rf_ack_wait_timer_interrupt, slots*50e-6);
+  rf->ack_timer.attach(rf_ack_wait_timer_interrupt, slots*50e-6);
 }
 
 /*
@@ -153,7 +168,7 @@ void rf_if_ack_wait_timer_start(uint16_t slots)
  */
 void rf_if_calibration_timer_start(uint32_t slots)
 {
-  cal_timer.attach(rf_calibration_timer_interrupt, slots*50e-6);
+  rf->cal_timer.attach(rf_calibration_timer_interrupt, slots*50e-6);
 }
 
 /*
@@ -165,7 +180,7 @@ void rf_if_calibration_timer_start(uint32_t slots)
  */
 void rf_if_cca_timer_start(uint32_t slots)
 {
-  cca_timer.attach(rf_cca_timer_interrupt, slots*50e-6);
+  rf->cca_timer.attach(rf_cca_timer_interrupt, slots*50e-6);
 }
 
 /*
@@ -177,7 +192,7 @@ void rf_if_cca_timer_start(uint32_t slots)
  */
 void rf_if_ack_wait_timer_stop(void)
 {
-  ack_timer.detach();
+  rf->ack_timer.detach();
 }
 
 
@@ -190,7 +205,7 @@ void rf_if_ack_wait_timer_stop(void)
  */
 void rf_if_slp_tr_pin_high(void)
 {
-  RF_SLP_TR = 1;
+  rf->SLP_TR = 1;
 }
 
 /*
@@ -202,7 +217,7 @@ void rf_if_slp_tr_pin_high(void)
  */
 void rf_if_slp_tr_pin_low(void)
 {
-  RF_SLP_TR = 0;
+  rf->SLP_TR = 0;
 }
 
 
@@ -312,19 +327,20 @@ uint8_t rf_if_read_register(uint8_t addr)
  */
 void rf_if_reset_radio(void)
 {
-  spi.frequency(SPI_SPEED);
-  RF_IRQ.rise(0);
-  RF_RST = 1;
+  if (!rf) rf = new RFBits;
+  rf->spi.frequency(SPI_SPEED);
+  rf->IRQ.rise(0);
+  rf->RST = 1;
   wait(10e-4);
-  RF_RST = 0;
+  rf->RST = 0;
   wait(10e-3);
   CS_RELEASE();
-  RF_SLP_TR = 0;
+  rf->SLP_TR = 0;
   wait(10e-3);
-  RF_RST = 1;
+  rf->RST = 1;
   wait(10e-3);
 
-  RF_IRQ.rise(&rf_if_interrupt_handler);
+  rf->IRQ.rise(&rf_if_interrupt_handler);
 }
 
 /*
@@ -387,7 +403,7 @@ void rf_if_disable_ant_div(void)
  */
 void rf_if_enable_slptr(void)
 {
-  RF_SLP_TR = 1;
+  rf->SLP_TR = 1;
 }
 
 /*
@@ -399,7 +415,7 @@ void rf_if_enable_slptr(void)
  */
 void rf_if_disable_slptr(void)
 {
-  RF_SLP_TR = 0;
+  rf->SLP_TR = 0;
 }
 
 /*
@@ -918,9 +934,12 @@ void rf_if_interrupt_handler(void)
 uint8_t rf_if_spi_exchange(uint8_t out)
 {
   uint8_t v;
-  v = spi.write(out);
+  v = rf->spi.write(out);
   // t9 = t5 = 250ns, delay between LSB of last byte to next MSB or delay between LSB & SEL rising
   // [SPI setup assumed slow enough to not need manual delay]
   // delay_ns(250);
   return v;
 }
+
+#endif //YOTTA_CFG_ATMEL_RF_SPI_MOSI
+

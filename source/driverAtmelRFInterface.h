@@ -153,7 +153,8 @@ extern "C" {
  *    }
  *  }
  */
- 
+
+#if defined TARGET_FF_ARDUINO || defined YOTTA_CFG
 #ifndef YOTTA_CFG_ATMEL_RF_SPI_MOSI
 #define YOTTA_CFG_ATMEL_RF_SPI_MOSI D11
 #endif
@@ -175,7 +176,7 @@ extern "C" {
 #ifndef YOTTA_CFG_ATMEL_RF_SPI_IRQ
 #define YOTTA_CFG_ATMEL_RF_SPI_IRQ D9
 #endif
-
+#endif // TARGET_FF_ARDUINO
 
 void rf_if_cca_timer_start(uint32_t slots);
 void rf_if_enable_promiscuous_mode(void);
