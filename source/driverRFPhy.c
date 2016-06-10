@@ -638,7 +638,7 @@ void rf_receive(void)
 
         rf_if_change_trx_state(PLL_ON);
 
-        if(rf_mode == RF_MODE_SNIFFER)
+        if((rf_mode == RF_MODE_SNIFFER) || (rf_mode == RF_MODE_ED))
         {
             rf_if_change_trx_state(RX_ON);
         }
@@ -667,7 +667,11 @@ void rf_receive(void)
 
         rf_channel_set(rf_phy_channel);
         rf_flags_set(RFF_RX);
-        rf_if_enable_rx_end_interrupt();
+        // Don't receive packets when ED mode enabled
+        if (rf_mode != RF_MODE_ED)
+        {
+            rf_if_enable_rx_end_interrupt();
+        }
         platform_exit_critical();
     }
     /*Stop the running CCA process*/
@@ -972,11 +976,23 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
             break;
         /*Enable PHY Interface driver*/
         case PHY_INTERFACE_UP:
+            rf_mode = RF_MODE_NORMAL;
             rf_channel_set(rf_channel);
             rf_receive();
+            rf_if_enable_irq();
             break;
         /*Enable wireless interface ED scan mode*/
         case PHY_INTERFACE_RX_ENERGY_STATE:
+            rf_mode = RF_MODE_ED;
+            rf_channel_set(rf_channel);
+            rf_receive();
+            rf_if_disable_irq();
+            // Read status to clear pending flags.
+            rf_if_read_register(IRQ_STATUS);
+            // Must set interrupt mask to be able to read IRQ status. GPIO interrupt is disabled.
+            rf_if_set_bit(IRQ_MASK, CCA_ED_DONE, CCA_ED_DONE);
+            // ED can be initiated by writing arbitrary value to PHY_ED_LEVEL
+            rf_if_write_register(PHY_ED_LEVEL, 0xff);
             break;
         case PHY_INTERFACE_SNIFFER_STATE:             /**< Enable Sniffer state */
             rf_mode = RF_MODE_SNIFFER;
@@ -1020,6 +1036,14 @@ static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_pt
             break;
         /*Read energy on the channel*/
         case PHY_EXTENSION_READ_CHANNEL_ENERGY:
+            // End of the ED measurement is indicated by CCA_ED_DONE
+            while (!(rf_if_read_register(IRQ_STATUS) & CCA_ED_DONE));
+            // RF input power: RSSI base level + 1[db] * PHY_ED_LEVEL
+            *data_ptr = rf_sensitivity + rf_if_read_register(PHY_ED_LEVEL);
+            // Read status to clear pending flags.
+            rf_if_read_register(IRQ_STATUS);
+            // Next ED measurement is started, next PHY_EXTENSION_READ_CHANNEL_ENERGY call will return the result.
+            rf_if_write_register(PHY_ED_LEVEL, 0xff);
             break;
         /*Read status of the link*/
         case PHY_EXTENSION_READ_LINK_STATUS:

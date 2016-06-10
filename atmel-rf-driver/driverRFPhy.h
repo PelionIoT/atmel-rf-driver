@@ -68,6 +68,7 @@ extern "C" {
 
 #define RF_MODE_NORMAL  0
 #define RF_MODE_SNIFFER 1
+#define RF_MODE_ED      2
 
 /*Atmel RF Part Type*/
 typedef enum

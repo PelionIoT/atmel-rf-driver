@@ -234,6 +234,8 @@ extern void rf_if_set_channel_register(uint8_t channel);
 void rf_if_enable_promiscuous_mode(void);
 void rf_if_disable_promiscuous_mode(void);
 uint8_t rf_if_read_part_num(void);
+void rf_if_enable_irq(void);
+void rf_if_disable_irq(void);
 
 #ifdef __cplusplus
 }

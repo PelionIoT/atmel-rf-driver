@@ -878,6 +878,30 @@ void rf_if_set_channel_register(uint8_t channel)
 }
 
 /*
+ * \brief Function enables RF irq pin interrupts in RF interface.
+ *
+ * \param none
+ *
+ * \return none
+ */
+void rf_if_enable_irq(void)
+{
+  rf->IRQ.enable_irq();
+}
+
+/*
+ * \brief Function disables RF irq pin interrupts in RF interface.
+ *
+ * \param none
+ *
+ * \return none
+ */
+void rf_if_disable_irq(void)
+{
+  rf->IRQ.disable_irq();
+}
+
+/*
  * \brief Function is a RF interrupt vector. End of frame in RX and TX are handled here as well as CCA process interrupt.
  *
  * \param none
