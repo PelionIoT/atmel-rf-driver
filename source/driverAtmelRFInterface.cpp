@@ -43,9 +43,17 @@ static void rf_if_irq_task_process_irq();
 // HW pins to RF chip
 #define SPI_SPEED 7500000
 
+class UnlockedSPI : public SPI {
+public:
+    UnlockedSPI(PinName mosi, PinName miso, PinName sclk, PinName ssel=NC) :
+        SPI(mosi, miso, sclk, ssel) { }
+    virtual void lock() { }
+    virtual void unlock() { }
+};
+
 struct RFBits {
     RFBits();
-    SPI spi;
+    UnlockedSPI spi;
     DigitalOut CS;
     DigitalOut RST;
     DigitalOut SLP_TR;
