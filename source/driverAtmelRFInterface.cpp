@@ -357,12 +357,10 @@ void rf_if_clear_bit(uint8_t addr, uint8_t bit)
 void rf_if_write_register(uint8_t addr, uint8_t data)
 {
   uint8_t cmd = 0xC0;
-  rf_if_lock();
   CS_SELECT();
   rf_if_spi_exchange(cmd | addr);
   rf_if_spi_exchange(data);
   CS_RELEASE();
-  rf_if_unlock();
 }
 
 /*
@@ -376,12 +374,10 @@ uint8_t rf_if_read_register(uint8_t addr)
 {
   uint8_t cmd = 0x80;
   uint8_t data;
-  rf_if_lock();
   CS_SELECT();
   rf_if_spi_exchange(cmd | addr);
   data = rf_if_spi_exchange(0);
   CS_RELEASE();
-  rf_if_unlock();
   return data;
 }
 
@@ -691,10 +687,12 @@ uint8_t rf_if_last_acked_pending(void)
 {
   uint8_t last_acked_data_pending;
 
+  rf_if_lock();
   if(rf_if_read_register(CSMA_SEED_1) & 0x20)
     last_acked_data_pending = 1;
   else
     last_acked_data_pending = 0;
+  rf_if_unlock();
 
   return last_acked_data_pending;
 }

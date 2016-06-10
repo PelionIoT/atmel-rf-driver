@@ -436,6 +436,9 @@ void rf_init(void)
 {
     /*Reset RF module*/
     rf_if_reset_radio();
+
+    rf_if_lock();
+
     /*Write RF settings*/
     rf_write_settings();
     /*Initialise PHY mode*/
@@ -452,6 +455,8 @@ void rf_init(void)
     rf_rnd_rssi = rf_if_read_rnd();
     /*Start RF calibration timer*/
     rf_calibration_timer_start(RF_CALIBRATION_INTERVAL);
+
+    rf_if_unlock();
 }
 
 /**
@@ -918,7 +923,9 @@ int8_t rf_tx_power_set(uint8_t power)
     int8_t ret_val = -1;
 
     radio_tx_power = power;
+    rf_if_lock();
     rf_if_write_set_tx_power_register(radio_tx_power);
+    rf_if_unlock();
     ret_val = 0;
 
     return ret_val;
