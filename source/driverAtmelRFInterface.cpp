@@ -19,11 +19,6 @@
 #include "driverAtmelRFInterface.h"
 #include "mbed-drivers/mbed.h"
 
-// Pending better config support, we gate compilation
-// on this being defined. Which will be for Arduino
-// form factors, or if manually configured.
-#ifdef YOTTA_CFG_ATMEL_RF_SPI_MOSI
-
 // HW pins to RF chip
 #define SPI_SPEED 7500000
 
@@ -40,13 +35,11 @@ struct RFBits {
 };
 
 RFBits::RFBits() :
-spi(YOTTA_CFG_ATMEL_RF_SPI_MOSI,
-    YOTTA_CFG_ATMEL_RF_SPI_MISO,
-    YOTTA_CFG_ATMEL_RF_SPI_SCLK),
-CS(YOTTA_CFG_ATMEL_RF_SPI_CS),
-RST(YOTTA_CFG_ATMEL_RF_SPI_RST),
-SLP_TR(YOTTA_CFG_ATMEL_RF_SPI_SLP),
-IRQ(YOTTA_CFG_ATMEL_RF_SPI_IRQ) { }
+spi(PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCLK),
+CS(PIN_SPI_CS),
+RST(PIN_SPI_RST),
+SLP_TR(PIN_SPI_SLP),
+IRQ(PIN_SPI_IRQ) { }
 
 void (*app_rf_settings_cb)(void) = 0;
 static RFBits *rf;
@@ -940,6 +933,3 @@ uint8_t rf_if_spi_exchange(uint8_t out)
   // delay_ns(250);
   return v;
 }
-
-#endif //YOTTA_CFG_ATMEL_RF_SPI_MOSI
-
