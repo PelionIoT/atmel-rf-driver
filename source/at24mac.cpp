@@ -30,7 +30,10 @@
 #define EUI64_LEN 8
 #define EUI48_LEN 6
 
-I2C i2c(PIN_I2C_SDA, PIN_I2C_SCL);
+static I2C &get_i2c(void) {
+    static I2C i2c(PIN_I2C_SDA, PIN_I2C_SCL);
+    return i2c;
+}
 
 /**
  * Read unique serial number from chip.
@@ -39,6 +42,7 @@ I2C i2c(PIN_I2C_SDA, PIN_I2C_SCL);
  */
 extern "C" int at24mac_read_serial(void *buf)
 {
+    I2C &i2c = get_i2c();
 	char offset = AT24MAC_SERIAL_OFFSET;
 	if (i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
 		return -1; //No ACK
@@ -52,6 +56,7 @@ extern "C" int at24mac_read_serial(void *buf)
  */
 extern "C" int at24mac_read_eui64(void *buf)
 {
+    I2C &i2c = get_i2c();
 	char offset = AT24MAC_EUI64_OFFSET;
 	if (i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
 		return -1; //No ACK
@@ -65,6 +70,7 @@ extern "C" int at24mac_read_eui64(void *buf)
  */
 extern "C" int at24mac_read_eui48(void *buf)
 {
+    I2C &i2c = get_i2c();
 	char offset = AT24MAC_EUI48_OFFSET;
 	if (i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
 		return -1; //No ACK
