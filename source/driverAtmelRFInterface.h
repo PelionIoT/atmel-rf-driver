@@ -154,33 +154,105 @@ extern "C" {
  *  }
  */
 
+/* mbed-cli configuration */
+#ifdef MBED_CONF_ATMEL_RF_SPI_MOSI
+#define PIN_SPI_MOSI MBED_CONF_ATMEL_RF_SPI_MOSI
+#endif
+#ifdef MBED_CONF_ATMEL_RF_SPI_MISO
+#define PIN_SPI_MISO MBED_CONF_ATMEL_RF_SPI_MISO
+#endif
+#ifdef MBED_CONF_ATMEL_RF_SPI_SCLK
+#define PIN_SPI_SCLK MBED_CONF_ATMEL_RF_SPI_SCLK
+#endif
+#ifdef MBED_CONF_ATMEL_RF_SPI_CS
+#define PIN_SPI_CS MBED_CONF_ATMEL_RF_SPI_CS
+#endif
+#ifdef MBED_CONF_ATMEL_RF_SPI_RST
+#define PIN_SPI_RST MBED_CONF_ATMEL_RF_SPI_RST
+#endif
+#ifdef MBED_CONF_ATMEL_RF_SPI_SLP
+#define PIN_SPI_SLP MBED_CONF_ATMEL_RF_SPI_SLP
+#endif
+#ifdef MBED_CONF_ATMEL_RF_SPI_IRQ
+#define PIN_SPI_IRQ MBED_CONF_ATMEL_RF_SPI_IRQ
+#endif
+
+/* Yotta configuration */
+#ifdef YOTTA_CFG_ATMEL_RF_SPI_MOSI
+#define PIN_SPI_MOSI YOTTA_CFG_ATMEL_RF_SPI_MOSI
+#endif
+#ifdef YOTTA_CFG_ATMEL_RF_SPI_MISO
+#define PIN_SPI_MISO YOTTA_CFG_ATMEL_RF_SPI_MISO
+#endif
+#ifdef YOTTA_CFG_ATMEL_RF_SPI_SCLK
+#define PIN_SPI_SCLK YOTTA_CFG_ATMEL_RF_SPI_SCLK
+#endif
+#ifdef YOTTA_CFG_ATMEL_RF_SPI_CS
+#define PIN_SPI_CS YOTTA_CFG_ATMEL_RF_SPI_CS
+#endif
+#ifdef YOTTA_CFG_ATMEL_RF_SPI_RST
+#define PIN_SPI_RST YOTTA_CFG_ATMEL_RF_SPI_RST
+#endif
+#ifdef YOTTA_CFG_ATMEL_RF_SPI_SLP
+#define PIN_SPI_SLP YOTTA_CFG_ATMEL_RF_SPI_SLP
+#endif
+#ifdef YOTTA_CFG_ATMEL_RF_SPI_IRQ
+#define PIN_SPI_IRQ YOTTA_CFG_ATMEL_RF_SPI_IRQ
+#endif
+
+/* Defaults for Arduino form factor, or Yotta */
 #if defined TARGET_FF_ARDUINO || defined YOTTA_CFG
-#ifndef YOTTA_CFG_ATMEL_RF_SPI_MOSI
-#define YOTTA_CFG_ATMEL_RF_SPI_MOSI D11
+#ifndef PIN_SPI_MOSI
+#define PIN_SPI_MOSI D11
 #endif
-#ifndef YOTTA_CFG_ATMEL_RF_SPI_MISO
-#define YOTTA_CFG_ATMEL_RF_SPI_MISO D12
+#ifndef PIN_SPI_MISO
+#define PIN_SPI_MISO D12
 #endif
-#ifndef YOTTA_CFG_ATMEL_RF_SPI_SCLK
-#define YOTTA_CFG_ATMEL_RF_SPI_SCLK D13
+#ifndef PIN_SPI_SCLK
+#define PIN_SPI_SCLK D13
 #endif
-#ifndef YOTTA_CFG_ATMEL_RF_SPI_CS
-#define YOTTA_CFG_ATMEL_RF_SPI_CS D10
+#ifndef PIN_SPI_CS
+#define PIN_SPI_CS D10
 #endif
-#ifndef YOTTA_CFG_ATMEL_RF_SPI_RST
-#define YOTTA_CFG_ATMEL_RF_SPI_RST D5
+#ifndef PIN_SPI_RST
+#define PIN_SPI_RST D5
 #endif
-#ifndef YOTTA_CFG_ATMEL_RF_SPI_SLP
-#define YOTTA_CFG_ATMEL_RF_SPI_SLP D7
+#ifndef PIN_SPI_SLP
+#define PIN_SPI_SLP D7
 #endif
-#ifndef YOTTA_CFG_ATMEL_RF_SPI_IRQ
-#define YOTTA_CFG_ATMEL_RF_SPI_IRQ D9
+#ifndef PIN_SPI_IRQ
+#define PIN_SPI_IRQ D9
 #endif
-#endif // TARGET_FF_ARDUINO
+#endif // TARGET_FF_ARDUINO || YOTTA_CFG
+
+/* Final fallback defines so we at least compile */
+#ifndef PIN_SPI_MOSI
+#define PIN_SPI_MOSI NC
+#endif
+#ifndef PIN_SPI_MISO
+#define PIN_SPI_MISO NC
+#endif
+#ifndef PIN_SPI_SCLK
+#define PIN_SPI_SCLK NC
+#endif
+#ifndef PIN_SPI_CS
+#define PIN_SPI_CS NC
+#endif
+#ifndef PIN_SPI_RST
+#define PIN_SPI_RST NC
+#endif
+#ifndef PIN_SPI_SLP
+#define PIN_SPI_SLP NC
+#endif
+#ifndef PIN_SPI_IRQ
+#define PIN_SPI_IRQ NC
+#endif
 
 void rf_if_cca_timer_start(uint32_t slots);
 void rf_if_enable_promiscuous_mode(void);
 
+void rf_if_lock(void);
+void rf_if_unlock(void);
 
 extern uint8_t rf_if_read_rnd(void);
 extern void rf_if_calibration_timer_start(uint32_t slots);

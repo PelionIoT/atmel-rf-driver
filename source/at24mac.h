@@ -52,14 +52,39 @@
  *  }
  */
 
+/* mbed-cli configuration */
+#ifdef MBED_CONF_ATMEL_RF_I2C_SDA
+#define PIN_I2C_SDA MBED_CONF_ATMEL_RF_I2C_SDA
+#endif
+#ifdef MBED_CONF_ATMEL_RF_I2C_SCL
+#define PIN_I2C_SCL MBED_CONF_ATMEL_RF_I2C_SCL
+#endif
+
+/* Yotta configuration */
+#ifdef YOTTA_CFG_ATMEL_RF_I2C_SDA
+#define PIN_I2C_SDA YOTTA_CFG_ATMEL_RF_I2C_SDA
+#endif
+#ifdef YOTTA_CFG_ATMEL_RF_I2C_SCL
+#define PIN_I2C_SCL YOTTA_CFG_ATMEL_RF_I2C_SCL
+#endif
+
+/* Defaults for Arduino form factor, or Yotta */
 #if defined TARGET_FF_ARDUINO || defined YOTTA_CFG
-#ifndef YOTTA_CFG_ATMEL_RF_I2C_SDA
-#define YOTTA_CFG_ATMEL_RF_I2C_SDA D14
+#ifndef PIN_I2C_SDA
+#define PIN_I2C_SDA D14
 #endif
-#ifndef YOTTA_CFG_ATMEL_RF_I2C_SCL
-#define YOTTA_CFG_ATMEL_RF_I2C_SCL D15
+#ifndef PIN_I2C_SCL
+#define PIN_I2C_SCL D15
 #endif
-#endif //TARGET_FF_ARDUINO
+#endif //TARGET_FF_ARDUINO || YOTTA_CFG
+
+/* Final fallback defines so we at least compile */
+#ifndef PIN_I2C_SDA
+#define PIN_I2C_SDA NC
+#endif
+#ifndef PIN_I2C_SCL
+#define PIN_I2C_SCL NC
+#endif
 
 #ifdef __cplusplus
 extern "C" {

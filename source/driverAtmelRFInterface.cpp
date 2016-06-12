@@ -19,17 +19,36 @@
 #include "driverAtmelRFInterface.h"
 #include "mbed-drivers/mbed.h"
 
-// Pending better config support, we gate compilation
-// on this being defined. Which will be for Arduino
-// form factors, or if manually configured.
-#ifdef YOTTA_CFG_ATMEL_RF_SPI_MOSI
+#ifdef MBED_CONF_RTOS_PRESENT
+#include "Mutex.h"
+#include "Thread.h"
+using namespace rtos;
+
+static void rf_if_irq_task_process_irq();
+
+#define SIG_RADIO       1
+#define SIG_TIMER_ACK   2
+#define SIG_TIMER_CAL   4
+#define SIG_TIMER_CCA   8
+
+#define SIG_TIMERS (SIG_TIMER_ACK|SIG_TIMER_CAL|SIG_TIMER_CCA)
+#define SIG_ALL (SIG_RADIO|SIG_TIMERS)
+#endif
 
 // HW pins to RF chip
 #define SPI_SPEED 7500000
 
+class UnlockedSPI : public SPI {
+public:
+    UnlockedSPI(PinName mosi, PinName miso, PinName sclk, PinName ssel=NC) :
+        SPI(mosi, miso, sclk, ssel) { }
+    virtual void lock() { }
+    virtual void unlock() { }
+};
+
 struct RFBits {
     RFBits();
-    SPI spi;
+    UnlockedSPI spi;
     DigitalOut CS;
     DigitalOut RST;
     DigitalOut SLP_TR;
@@ -37,16 +56,25 @@ struct RFBits {
     Timeout ack_timer;
     Timeout cal_timer;
     Timeout cca_timer;
+#ifdef MBED_CONF_RTOS_PRESENT
+    Thread irq_thread;
+    Mutex mutex;
+    void rf_if_irq_task();
+#endif
 };
 
 RFBits::RFBits() :
-spi(YOTTA_CFG_ATMEL_RF_SPI_MOSI,
-    YOTTA_CFG_ATMEL_RF_SPI_MISO,
-    YOTTA_CFG_ATMEL_RF_SPI_SCLK),
-CS(YOTTA_CFG_ATMEL_RF_SPI_CS),
-RST(YOTTA_CFG_ATMEL_RF_SPI_RST),
-SLP_TR(YOTTA_CFG_ATMEL_RF_SPI_SLP),
-IRQ(YOTTA_CFG_ATMEL_RF_SPI_IRQ) { }
+spi(PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCLK),
+CS(PIN_SPI_CS),
+RST(PIN_SPI_RST),
+SLP_TR(PIN_SPI_SLP),
+IRQ(PIN_SPI_IRQ)
+#ifdef MBED_CONF_RTOS_PRESENT
+,irq_thread(osPriorityRealtime, 1024)
+#endif
+{
+    irq_thread.start(this, &RFBits::rf_if_irq_task);
+}
 
 void (*app_rf_settings_cb)(void) = 0;
 static RFBits *rf;
@@ -58,6 +86,34 @@ static uint8_t rf_rx_status;
 static int8_t rf_rssi_base_val = -91;
 
 static uint8_t rf_if_spi_exchange(uint8_t out);
+
+void rf_if_lock(void)
+{
+    platform_enter_critical();
+}
+
+void rf_if_unlock(void)
+{
+    platform_exit_critical();
+}
+
+#ifdef MBED_CONF_RTOS_PRESENT
+static void rf_if_cca_timer_signal(void)
+{
+    rf->irq_thread.signal_set(SIG_TIMER_CCA);
+}
+
+static void rf_if_cal_timer_signal(void)
+{
+    rf->irq_thread.signal_set(SIG_TIMER_CAL);
+}
+
+static void rf_if_ack_timer_signal(void)
+{
+    rf->irq_thread.signal_set(SIG_TIMER_ACK);
+}
+#endif
+
 
 /* Delay functions for RF Chip SPI access */
 #ifdef __CC_ARM
@@ -156,7 +212,11 @@ rf_trx_part_e rf_radio_type_read(void)
  */
 void rf_if_ack_wait_timer_start(uint16_t slots)
 {
+#ifdef MBED_CONF_RTOS_PRESENT
+  rf->ack_timer.attach(rf_if_ack_timer_signal, slots*50e-6);
+#else
   rf->ack_timer.attach(rf_ack_wait_timer_interrupt, slots*50e-6);
+#endif
 }
 
 /*
@@ -168,7 +228,11 @@ void rf_if_ack_wait_timer_start(uint16_t slots)
  */
 void rf_if_calibration_timer_start(uint32_t slots)
 {
+#ifdef MBED_CONF_RTOS_PRESENT
+  rf->cal_timer.attach(rf_if_cal_timer_signal, slots*50e-6);
+#else
   rf->cal_timer.attach(rf_calibration_timer_interrupt, slots*50e-6);
+#endif
 }
 
 /*
@@ -180,7 +244,11 @@ void rf_if_calibration_timer_start(uint32_t slots)
  */
 void rf_if_cca_timer_start(uint32_t slots)
 {
+#ifdef MBED_CONF_RTOS_PRESENT
+  rf->cca_timer.attach(rf_if_cca_timer_signal, slots*50e-6);
+#else
   rf->cca_timer.attach(rf_cca_timer_interrupt, slots*50e-6);
+#endif
 }
 
 /*
@@ -290,12 +358,10 @@ void rf_if_clear_bit(uint8_t addr, uint8_t bit)
 void rf_if_write_register(uint8_t addr, uint8_t data)
 {
   uint8_t cmd = 0xC0;
-  platform_enter_critical();
   CS_SELECT();
   rf_if_spi_exchange(cmd | addr);
   rf_if_spi_exchange(data);
   CS_RELEASE();
-  platform_exit_critical();
 }
 
 /*
@@ -309,12 +375,10 @@ uint8_t rf_if_read_register(uint8_t addr)
 {
   uint8_t cmd = 0x80;
   uint8_t data;
-  platform_enter_critical();
   CS_SELECT();
   rf_if_spi_exchange(cmd | addr);
   data = rf_if_spi_exchange(0);
   CS_RELEASE();
-  platform_exit_critical();
   return data;
 }
 
@@ -327,7 +391,9 @@ uint8_t rf_if_read_register(uint8_t addr)
  */
 void rf_if_reset_radio(void)
 {
-  if (!rf) rf = new RFBits;
+  if (!rf) {
+      rf = new RFBits;
+  }
   rf->spi.frequency(SPI_SPEED);
   rf->IRQ.rise(0);
   rf->RST = 1;
@@ -599,7 +665,7 @@ void rf_if_write_short_addr_registers(uint8_t *short_address)
  */
 void rf_if_ack_pending_ctrl(uint8_t state)
 {
-  platform_enter_critical();
+  rf_if_lock();
   if(state)
   {
     rf_if_set_bit(CSMA_SEED_1, (1 << AACK_SET_PD), (1 << AACK_SET_PD));
@@ -608,7 +674,7 @@ void rf_if_ack_pending_ctrl(uint8_t state)
   {
     rf_if_clear_bit(CSMA_SEED_1, (1 << AACK_SET_PD));
   }
-  platform_exit_critical();
+  rf_if_unlock();
 }
 
 /*
@@ -622,10 +688,12 @@ uint8_t rf_if_last_acked_pending(void)
 {
   uint8_t last_acked_data_pending;
 
+  rf_if_lock();
   if(rf_if_read_register(CSMA_SEED_1) & 0x20)
     last_acked_data_pending = 1;
   else
     last_acked_data_pending = 0;
+  rf_if_unlock();
 
   return last_acked_data_pending;
 }
@@ -736,11 +804,11 @@ uint8_t rf_if_read_rnd(void)
  */
 void rf_if_change_trx_state(rf_trx_states_t trx_state)
 {
-  platform_enter_critical();
+  rf_if_lock();
   rf_if_write_register(TRX_STATE, trx_state);
   /*Wait while not in desired state*/
   rf_poll_trx_state_change(trx_state);
-  platform_exit_critical();
+  rf_if_unlock();
 }
 
 /*
@@ -877,6 +945,40 @@ void rf_if_set_channel_register(uint8_t channel)
   rf_if_set_bit(PHY_CC_CCA, channel, 0x1f);
 }
 
+#ifdef MBED_CONF_RTOS_PRESENT
+void rf_if_interrupt_handler(void)
+{
+    rf->irq_thread.signal_set(SIG_RADIO);
+}
+
+// Started during construction of rf, so variable
+// rf isn't set at the start. Uses 'this' instead.
+void RFBits::rf_if_irq_task(void)
+{
+    for (;;) {
+        osEvent event = irq_thread.signal_wait(0);
+        if (event.status != osEventSignal) {
+            continue;
+        }
+        rf_if_lock();
+        if (event.value.signals & SIG_RADIO) {
+            rf_if_irq_task_process_irq();
+        }
+        if (event.value.signals & SIG_TIMER_ACK) {
+            rf_ack_wait_timer_interrupt();
+        }
+        if (event.value.signals & SIG_TIMER_CCA) {
+            rf_cca_timer_interrupt();
+        }
+        if (event.value.signals & SIG_TIMER_CAL) {
+            rf_calibration_timer_interrupt();
+        }
+        rf_if_unlock();
+    }
+}
+
+static void rf_if_irq_task_process_irq(void)
+#else
 /*
  * \brief Function is a RF interrupt vector. End of frame in RX and TX are handled here as well as CCA process interrupt.
  *
@@ -885,6 +987,7 @@ void rf_if_set_channel_register(uint8_t channel)
  * \return none
  */
 void rf_if_interrupt_handler(void)
+#endif
 {
   uint8_t irq_status;
 
@@ -940,6 +1043,3 @@ uint8_t rf_if_spi_exchange(uint8_t out)
   // delay_ns(250);
   return v;
 }
-
-#endif //YOTTA_CFG_ATMEL_RF_SPI_MOSI
-
