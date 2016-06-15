@@ -73,7 +73,9 @@ IRQ(PIN_SPI_IRQ)
 ,irq_thread(osPriorityRealtime, 1024)
 #endif
 {
+#ifdef MBED_CONF_RTOS_PRESENT
     irq_thread.start(this, &RFBits::rf_if_irq_task);
+#endif
 }
 
 void (*app_rf_settings_cb)(void) = 0;
