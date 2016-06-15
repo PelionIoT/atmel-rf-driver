@@ -945,6 +945,30 @@ void rf_if_set_channel_register(uint8_t channel)
   rf_if_set_bit(PHY_CC_CCA, channel, 0x1f);
 }
 
+/*
+ * \brief Function enables RF irq pin interrupts in RF interface.
+ *
+ * \param none
+ *
+ * \return none
+ */
+void rf_if_enable_irq(void)
+{
+  rf->IRQ.enable_irq();
+}
+
+/*
+ * \brief Function disables RF irq pin interrupts in RF interface.
+ *
+ * \param none
+ *
+ * \return none
+ */
+void rf_if_disable_irq(void)
+{
+  rf->IRQ.disable_irq();
+}
+
 #ifdef MBED_CONF_RTOS_PRESENT
 void rf_if_interrupt_handler(void)
 {
