@@ -22,8 +22,6 @@
 #include "randLIB.h"
 #include "at24mac.h"
 
-#ifdef YOTTA_CFG_ATMEL_RF_SPI_MOSI
-
 /*RF receive buffer*/
 static uint8_t rf_buffer[RF_BUFFER_SIZE];
 /*ACK wait duration changes depending on data rate*/
@@ -182,7 +180,7 @@ int8_t rf_read_random(void)
  */
 void rf_ack_wait_timer_interrupt(void)
 {
-    platform_enter_critical();
+    rf_if_lock();
     /*Force PLL state*/
     rf_if_change_trx_state(FORCE_PLL_ON);
     rf_poll_trx_state_change(PLL_ON);
@@ -190,7 +188,7 @@ void rf_ack_wait_timer_interrupt(void)
     rf_rx_mode = 0;
     rf_flags_clear(RFF_RX);
     rf_receive();
-    platform_exit_critical();
+    rf_if_unlock();
 }
 
 /*
@@ -320,14 +318,14 @@ uint16_t rf_get_phy_mtu_size(void)
  */
 void rf_write_settings(void)
 {
-    platform_enter_critical();
+    rf_if_lock();
     rf_if_write_rf_settings();
     /*Set output power*/
     rf_if_write_set_tx_power_register(radio_tx_power);
     /*Initialise Antenna Diversity*/
     if(rf_use_antenna_diversity)
         rf_if_write_antenna_diversity_settings();
-    platform_exit_critical();
+    rf_if_unlock();
 }
 
 /*
@@ -339,7 +337,7 @@ void rf_write_settings(void)
  */
 void rf_set_short_adr(uint8_t * short_address)
 {
-    platform_enter_critical();
+    rf_if_lock();
     /*Wake up RF if sleeping*/
     if(rf_flags_check(RFF_ON) == 0)
     {
@@ -353,7 +351,7 @@ void rf_set_short_adr(uint8_t * short_address)
     {
         rf_if_enable_slptr();
     }
-    platform_exit_critical();
+    rf_if_unlock();
 }
 
 /*
@@ -365,7 +363,7 @@ void rf_set_short_adr(uint8_t * short_address)
  */
 void rf_set_pan_id(uint8_t *pan_id)
 {
-    platform_enter_critical();
+    rf_if_lock();
     /*Wake up RF if sleeping*/
     if(rf_flags_check(RFF_ON) == 0)
     {
@@ -379,7 +377,7 @@ void rf_set_pan_id(uint8_t *pan_id)
     {
         rf_if_enable_slptr();
     }
-    platform_exit_critical();
+    rf_if_unlock();
 }
 
 /*
@@ -391,7 +389,7 @@ void rf_set_pan_id(uint8_t *pan_id)
  */
 void rf_set_address(uint8_t *address)
 {
-    platform_enter_critical();
+    rf_if_lock();
     /*Wake up RF if sleeping*/
     if(rf_flags_check(RFF_ON) == 0)
     {
@@ -405,7 +403,7 @@ void rf_set_address(uint8_t *address)
     {
         rf_if_enable_slptr();
     }
-    platform_exit_critical();
+    rf_if_unlock();
 }
 
 /*
@@ -417,11 +415,11 @@ void rf_set_address(uint8_t *address)
  */
 void rf_channel_set(uint8_t ch)
 {
-    platform_enter_critical();
+    rf_if_lock();
     rf_phy_channel = ch;
     if(ch < 0x1f)
         rf_if_set_channel_register(ch);
-    platform_exit_critical();
+    rf_if_unlock();
 }
 
 
@@ -436,6 +434,9 @@ void rf_init(void)
 {
     /*Reset RF module*/
     rf_if_reset_radio();
+
+    rf_if_lock();
+
     /*Write RF settings*/
     rf_write_settings();
     /*Initialise PHY mode*/
@@ -452,6 +453,8 @@ void rf_init(void)
     rf_rnd_rssi = rf_if_read_rnd();
     /*Start RF calibration timer*/
     rf_calibration_timer_start(RF_CALIBRATION_INTERVAL);
+
+    rf_if_unlock();
 }
 
 /**
@@ -465,7 +468,7 @@ void rf_off(void)
 {
     if(rf_flags_check(RFF_ON))
     {
-        platform_enter_critical();
+        rf_if_lock();
         rf_cca_abort();
         uint16_t while_counter = 0;
         /*Wait while receiving*/
@@ -486,7 +489,7 @@ void rf_off(void)
         /*Disable Antenna Diversity*/
         if(rf_use_antenna_diversity)
             rf_if_disable_ant_div();
-        platform_exit_critical();
+        rf_if_unlock();
     }
 
     /*Clears all flags*/
@@ -503,7 +506,7 @@ void rf_off(void)
 void rf_poll_trx_state_change(rf_trx_states_t trx_state)
 {
     uint16_t while_counter = 0;
-    platform_enter_critical();
+    rf_if_lock();
 
     if(trx_state != RF_TX_START)
     {
@@ -519,7 +522,7 @@ void rf_poll_trx_state_change(rf_trx_states_t trx_state)
                 break;
         }
     }
-    platform_exit_critical();
+    rf_if_unlock();
 }
 
 /*
@@ -542,7 +545,7 @@ int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, 
     }
     else
     {
-        platform_enter_critical();
+        rf_if_lock();
         /*Check if transmitted data needs to be acked*/
         if(*data_ptr & 0x20)
             need_ack = 1;
@@ -558,7 +561,7 @@ int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, 
         rf_cca_timer_start(RF_CCA_BASE_BACKOFF + randLIB_get_random_in_range(0, RF_CCA_RANDOM_BACKOFF));
         /*Store TX handle*/
         mac_tx_handle = tx_handle;
-        platform_exit_critical();
+        rf_if_unlock();
     }
 
     /*Return success*/
@@ -625,7 +628,7 @@ void rf_receive(void)
     /*If not yet in RX state set it*/
     if(rf_flags_check(RFF_RX) == 0)
     {
-        platform_enter_critical();
+        rf_if_lock();
         /*Wait while receiving data*/
         while(rf_if_read_trx_state() == BUSY_RX_AACK)
         {
@@ -672,7 +675,7 @@ void rf_receive(void)
         {
             rf_if_enable_rx_end_interrupt();
         }
-        platform_exit_critical();
+        rf_if_unlock();
     }
     /*Stop the running CCA process*/
     if(rf_flags_check(RFF_CCA))
@@ -693,7 +696,7 @@ void rf_calibration_cb(void)
     /*If RF is in default receive state, start calibration*/
     if(rf_if_read_trx_state() == RX_AACK_ON)
     {
-        platform_enter_critical();
+        rf_if_lock();
         /*Set RF in PLL_ON state*/
         rf_if_change_trx_state(PLL_ON);
         /*Set RF in TRX_OFF state to start PLL tuning*/
@@ -707,7 +710,7 @@ void rf_calibration_cb(void)
         /*Back to default receive state*/
         rf_flags_clear(RFF_RX);
         rf_receive();
-        platform_exit_critical();
+        rf_if_unlock();
     }
 }
 
@@ -723,7 +726,7 @@ void rf_on(void)
     /*Set RFF_ON flag*/
     if(rf_flags_check(RFF_ON) == 0)
     {
-        platform_enter_critical();
+        rf_if_lock();
         rf_flags_set(RFF_ON);
         /*Enable Antenna diversity*/
         if(rf_use_antenna_diversity)
@@ -733,7 +736,7 @@ void rf_on(void)
         /*Wake up from sleep state*/
         rf_if_disable_slptr();
         rf_poll_trx_state_change(TRX_OFF);
-        platform_exit_critical();
+        rf_if_unlock();
     }
 }
 
@@ -748,7 +751,7 @@ void rf_on(void)
 void rf_handle_ack(uint8_t seq_number, uint8_t data_pending)
 {
     phy_link_tx_status_e phy_status;
-    platform_enter_critical();
+    rf_if_lock();
     /*Received ACK sequence must be equal with transmitted packet sequence*/
     if(tx_sequence == seq_number)
     {
@@ -763,7 +766,7 @@ void rf_handle_ack(uint8_t seq_number, uint8_t data_pending)
             device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle,phy_status, 1, 1);
         }
     }
-    platform_exit_critical();
+    rf_if_unlock();
 }
 
 /*
@@ -922,7 +925,9 @@ int8_t rf_tx_power_set(uint8_t power)
     int8_t ret_val = -1;
 
     radio_tx_power = power;
+    rf_if_lock();
     rf_if_write_set_tx_power_register(radio_tx_power);
+    rf_if_unlock();
     ret_val = 0;
 
     return ret_val;
@@ -1284,5 +1289,3 @@ uint8_t rf_scale_lqi(int8_t rssi)
 
     return scaled_lqi;
 }
-
-#endif //YOTTA_CFG_ATMEL_RF_SPI_MOSI
