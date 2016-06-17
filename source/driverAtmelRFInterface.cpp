@@ -40,8 +40,8 @@ static void rf_if_irq_task_process_irq();
 
 class UnlockedSPI : public SPI {
 public:
-    UnlockedSPI(PinName mosi, PinName miso, PinName sclk, PinName ssel=NC) :
-        SPI(mosi, miso, sclk, ssel) { }
+    UnlockedSPI(PinName mosi, PinName miso, PinName sclk) :
+        SPI(mosi, miso, sclk) { }
     virtual void lock() { }
     virtual void unlock() { }
 };
@@ -73,7 +73,9 @@ IRQ(PIN_SPI_IRQ)
 ,irq_thread(osPriorityRealtime, 1024)
 #endif
 {
+#ifdef MBED_CONF_RTOS_PRESENT
     irq_thread.start(this, &RFBits::rf_if_irq_task);
+#endif
 }
 
 void (*app_rf_settings_cb)(void) = 0;
