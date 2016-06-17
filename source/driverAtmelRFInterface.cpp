@@ -40,8 +40,8 @@ static void rf_if_irq_task_process_irq();
 
 class UnlockedSPI : public SPI {
 public:
-    UnlockedSPI(PinName mosi, PinName miso, PinName sclk, PinName ssel=NC) :
-        SPI(mosi, miso, sclk, ssel) { }
+    UnlockedSPI(PinName mosi, PinName miso, PinName sclk) :
+        SPI(mosi, miso, sclk) { }
     virtual void lock() { }
     virtual void unlock() { }
 };
