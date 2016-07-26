@@ -14,7 +14,11 @@
  * limitations under the License.
  */
 #include "at24mac.h"
+#ifdef YOTTA_CFG
 #include "mbed-drivers/mbed.h"
+#else
+#include "mbed.h"
+#endif
 
 /* Device addressing */
 #define AT24MAC_EEPROM_ADDRESS		(0x0A<<4)

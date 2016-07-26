@@ -17,9 +17,13 @@
 #include "nanostack/platform/arm_hal_phy.h"
 #include "atmel-rf-driver/driverRFPhy.h"
 #include "driverAtmelRFInterface.h"
+
+#ifdef YOTTA_CFG
 #include "mbed-drivers/mbed.h"
+#endif
 
 #ifdef MBED_CONF_RTOS_PRESENT
+#include "mbed.h"
 #include "Mutex.h"
 #include "Thread.h"
 using namespace rtos;
