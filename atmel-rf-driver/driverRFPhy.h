@@ -79,6 +79,13 @@ typedef enum
     ATMEL_AT86RF233
 }rf_trx_part_e;
 
+/* Indication if MAC address is setup or not */
+typedef enum 
+{
+    MAC_NOT_PROVIDED = 0,
+    MAC_PROVIDED
+}rf_mac_addr_e;
+
 /*Atmel RF states*/
 typedef enum
 {
