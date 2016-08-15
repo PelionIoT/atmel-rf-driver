@@ -21,11 +21,11 @@
 #include <string.h>
 #include "randLIB.h"
 
-#if MBED_CONF_APP_EUI64_CHIP_NOT_PRESENT
+#if defined(MBED_CONF_ATMEL_RF_I2C_SDA == NC) && defined(MBED_CONF_ATMEL_RF_I2C_SCL == NC)
 #warning "User is responsible for setting a Unique MAC."
 #else
 #include "at24mac.h"
-#endif //MBED_CONF_APP_EUI64_CHIP_NOT_PRESENT
+#endif //defined(MBED_CONF_ATMEL_RF_I2C_SDA == NC) && defined(MBED_CONF_ATMEL_RF_I2C_SCL == NC)
 
 /*RF receive buffer*/
 static uint8_t rf_buffer[RF_BUFFER_SIZE];
@@ -122,7 +122,7 @@ int8_t rf_device_register(void)
 {
     rf_trx_part_e radio_type;
 
-#if MBED_CONF_APP_EUI64_CHIP_NOT_PRESENT
+#if defined(MBED_CONF_ATMEL_RF_I2C_SDA == NC) && defined(MBED_CONF_ATMEL_RF_I2C_SCL == NC)
     /* User should call rf_set_mac_address() to set a Unique MAC address */
     if(mac_address_provision_status != MAC_PROVIDED) {
         return -1; /* No MAC address*/
@@ -132,7 +132,7 @@ int8_t rf_device_register(void)
         return -1; //No MAC
     }
     mac_address_provision_status = MAC_PROVIDED;
-#endif //MBED_CONF_APP_EUI64_CHIP_NOT_PRESENT
+#endif //defined(MBED_CONF_ATMEL_RF_I2C_SDA == NC) && defined(MBED_CONF_ATMEL_RF_I2C_SCL == NC)
 
     rf_init();
 
