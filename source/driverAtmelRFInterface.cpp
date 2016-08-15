@@ -24,9 +24,7 @@
 
 #ifdef MBED_CONF_RTOS_PRESENT
 #include "mbed.h"
-#include "Mutex.h"
-#include "Thread.h"
-using namespace rtos;
+#include "rtos.h"
 
 static void rf_if_irq_task_process_irq();
 
