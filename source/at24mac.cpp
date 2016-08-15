@@ -20,6 +20,8 @@
 #include "mbed.h"
 #endif
 
+#if PIN_I2C_SDA != NC && PIN_I2C_SCL != NC
+
 /* Device addressing */
 #define AT24MAC_EEPROM_ADDRESS		(0x0A<<4)
 #define AT24MAC_RW_PROTECT_ADDRESS	(0x06<<4)
@@ -80,3 +82,5 @@ extern "C" int at24mac_read_eui48(void *buf)
 		return -1; //No ACK
 	return i2c.read(AT24MAC_SERIAL_ADDRESS, (char*)buf, EUI48_LEN);
 }
+
+#endif /* PIN_I2C_SDA != NC && PIN_I2C_SCL != NC */

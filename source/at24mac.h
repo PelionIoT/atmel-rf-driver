@@ -86,6 +86,8 @@
 #define PIN_I2C_SCL NC
 #endif
 
+#if PIN_I2C_SDA != NC && PIN_I2C_SCL != NC
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -113,5 +115,13 @@ int at24mac_read_eui48(void *buf);
 #ifdef __cplusplus
 }
 #endif
+
+#else /* PIN_I2C_SDA != NC && PIN_I2C_SCL != NC */
+
+#define at24mac_read_serial(buf) (-1)
+#define at24mac_read_eui64(buf) (-1)
+#define at24mac_read_eui48(buf) (-1)
+
+#endif /* PIN_I2C_SDA != NC && PIN_I2C_SCL != NC */
 
 #endif /* AT24MAC_H */

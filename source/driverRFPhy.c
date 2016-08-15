@@ -20,6 +20,7 @@
 #include "driverAtmelRFInterface.h"
 #include <string.h>
 #include "randLIB.h"
+
 #include "at24mac.h"
 
 /*RF receive buffer*/
@@ -40,8 +41,9 @@ static uint8_t rf_flags = 0;
 static uint8_t rf_rnd_rssi = 0;
 static int8_t rf_radio_driver_id = -1;
 static phy_device_driver_s device_driver;
-static uint8_t atmel_MAC[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+static uint8_t atmel_MAC[8];
 static uint8_t mac_tx_handle = 0;
+static bool mac_address_provided;
 static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_t rf_channel);
 static int8_t rf_extension(phy_extension_type_e extension_type,uint8_t *data_ptr);
 static int8_t rf_address_write(phy_address_type_e address_type,uint8_t *address_ptr);
@@ -104,6 +106,7 @@ void rf_flags_reset(void)
     rf_flags = 0;
 }
 
+
 /*
  * \brief Function initialises and registers the RF driver.
  *
@@ -115,8 +118,19 @@ int8_t rf_device_register(void)
 {
     rf_trx_part_e radio_type;
 
-    if (0 != at24mac_read_eui64(atmel_MAC))
-        return -1; //No MAC
+    /* User can call rf_set_mac_address() before rf_device_register to set a Unique MAC address */
+
+    /* If they haven't given us an address, try to get one from AT24MAC, if present */
+    if (!mac_address_provided) {
+        if (at24mac_read_eui64(atmel_MAC) >= 0) {
+            mac_address_provided = true;
+        }
+    }
+
+    /* If still don't have a MAC address, give up - no default inside the driver */
+    if (!mac_address_provided) {
+        return -1; /* No MAC address*/
+    }
 
     rf_init();
 
@@ -301,7 +315,8 @@ void rf_read_mac_address(uint8_t *ptr)
  */
 void rf_set_mac_address(const uint8_t *ptr)
 {
-    memcpy(atmel_MAC,ptr,8);
+    memcpy(atmel_MAC, ptr, 8);
+    mac_address_provided = true;
 }
 
 uint16_t rf_get_phy_mtu_size(void)
