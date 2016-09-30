@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 ARM Limited. All rights reserved.
+ * Copyright (c) 2016-2016 ARM Limited. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  * Licensed under the Apache License, Version 2.0 (the License); you may
  * not use this file except in compliance with the License.
@@ -14,13 +14,6 @@
  * limitations under the License.
  */
 #include "at24mac.h"
-#ifdef YOTTA_CFG
-#include "mbed-drivers/mbed.h"
-#else
-#include "mbed.h"
-#endif
-
-#ifdef DEVICE_I2C
 
 /* Device addressing */
 #define AT24MAC_EEPROM_ADDRESS		(0x0A<<4)
@@ -36,69 +29,31 @@
 #define EUI64_LEN 8
 #define EUI48_LEN 6
 
-static I2C *get_i2c(void) {
-	if (PIN_I2C_SDA != NC && PIN_I2C_SCL != NC) {
-		static I2C i2c(PIN_I2C_SDA, PIN_I2C_SCL);
-		return &i2c;
-	}
-    return NULL;
-}
-
-/**
- * Read unique serial number from chip.
- * \param buf pointer to write serial number to. Must have space for 16 bytes.
- * \return zero on success, negative number on failure
- */
-extern "C" int at24mac_read_serial(void *buf)
+AT24Mac::AT24Mac(PinName sda, PinName scl) : _i2c(sda, scl)
 {
-    I2C *i2c = get_i2c();
-    if (!i2c) {
-    	return -1;
-    }
-	char offset = AT24MAC_SERIAL_OFFSET;
-	if (i2c->write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
-		return -1; //No ACK
-	return i2c->read(AT24MAC_SERIAL_ADDRESS, (char*)buf, SERIAL_LEN);
+    // Do nothing
 }
 
-/**
- * Read EUI-64 from chip.
- * \param buf pointer to write EUI-64 to. Must have space for 8 bytes.
- * \return zero on success, negative number on failure
- */
-extern "C" int at24mac_read_eui64(void *buf)
+int AT24Mac::read_serial(void *buf)
 {
-    I2C *i2c = get_i2c();
-    if (!i2c) {
-    	return -1;
-    }
-	char offset = AT24MAC_EUI64_OFFSET;
-	if (i2c->write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
-		return -1; //No ACK
-	return i2c->read(AT24MAC_SERIAL_ADDRESS, (char*)buf, EUI64_LEN);
+    char offset = AT24MAC_SERIAL_OFFSET;
+    if (_i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
+        return -1; //No ACK
+    return _i2c.read(AT24MAC_SERIAL_ADDRESS, (char*)buf, SERIAL_LEN);
 }
 
-/**
- * Read EUI-48 from chip.
- * \param buf pointer to write EUI-48 to. Must have space for 6 bytes.
- * \return zero on success, negative number on failure
- */
-extern "C" int at24mac_read_eui48(void *buf)
+int AT24Mac::read_eui64(void *buf)
 {
-    I2C *i2c = get_i2c();
-    if (!i2c) {
-    	return -1;
-    }
-	char offset = AT24MAC_EUI48_OFFSET;
-	if (i2c->write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
-		return -1; //No ACK
-	return i2c->read(AT24MAC_SERIAL_ADDRESS, (char*)buf, EUI48_LEN);
+    char offset = AT24MAC_EUI64_OFFSET;
+    if (_i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
+        return -1; //No ACK
+    return _i2c.read(AT24MAC_SERIAL_ADDRESS, (char*)buf, EUI64_LEN);
 }
 
-#else /* DEVICE_I2C */
-
-extern "C" int at24mac_read_serial(void *) { return -1; }
-extern "C" int at24mac_read_eui64(void *)  { return -1; }
-extern "C" int at24mac_read_eui48(void *)  { return -1; }
-
-#endif /* DEVICE_I2C */
+int AT24Mac::read_eui48(void *buf)
+{
+    char offset = AT24MAC_EUI48_OFFSET;
+    if (_i2c.write(AT24MAC_SERIAL_ADDRESS, &offset, 1, true))
+        return -1; //No ACK
+    return _i2c.read(AT24MAC_SERIAL_ADDRESS, (char*)buf, EUI48_LEN);
+}
