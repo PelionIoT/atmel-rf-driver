@@ -92,7 +92,6 @@ static uint8_t tx_sequence = 0xff;
 static uint8_t need_ack = 0;
 static uint8_t rf_rx_mode = 0;
 static uint8_t rf_flags = 0;
-static uint8_t rf_rnd_rssi = 0;
 static int8_t rf_radio_driver_id = -1;
 static phy_device_driver_s device_driver;
 static uint8_t mac_tx_handle = 0;
@@ -1600,8 +1599,8 @@ static void rf_init(void)
     rf_if_change_trx_state(PLL_ON);
     /*Start receiver*/
     rf_receive();
-    /*Read random variable. This will be used when seeding pseudo-random generator*/
-    rf_rnd_rssi = rf_if_read_rnd();
+    /*Read randomness, and add to seed*/
+    randLIB_add_seed(rf_if_read_rnd());
     /*Start RF calibration timer*/
     rf_calibration_timer_start(RF_CALIBRATION_INTERVAL);
 
