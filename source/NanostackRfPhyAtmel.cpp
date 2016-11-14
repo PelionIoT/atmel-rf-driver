@@ -88,8 +88,7 @@ static uint8_t radio_tx_power = 0x00;   // Default to +4dBm
 static uint8_t rf_phy_channel = 12;
 static uint8_t rf_tuned = 1;
 static uint8_t rf_use_antenna_diversity = 0;
-static uint8_t tx_sequence = 0xff;
-static uint8_t need_ack = 0;
+static int16_t expected_ack_sequence = -1;
 static uint8_t rf_rx_mode = 0;
 static uint8_t rf_flags = 0;
 static int8_t rf_radio_driver_id = -1;
@@ -1361,6 +1360,7 @@ static void rf_device_unregister()
 static void rf_ack_wait_timer_interrupt(void)
 {
     rf_if_lock();
+    expected_ack_sequence = -1;
     /*Force PLL state*/
     rf_if_change_trx_state(FORCE_PLL_ON);
     rf_poll_trx_state_change(PLL_ON);
@@ -1697,12 +1697,16 @@ static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_h
     {
         rf_if_lock();
         /*Check if transmitted data needs to be acked*/
-        if(*data_ptr & 0x20)
-            need_ack = 1;
-        else
-            need_ack = 0;
-        /*Store the sequence number for ACK handling*/
-        tx_sequence = *(data_ptr + 2);
+        if(*data_ptr & 0x20) {
+            /*Store the sequence number for ACK handling*/
+            expected_ack_sequence = *(data_ptr + 2);
+            // TODO - when frame buffer write done after backoff, expected_ack_sequence should only
+            // be set once reception is disabled - at present this could handle an ACK before
+            // we actually transmit. But that's just another facet of us receiving packets while
+            // in backoff.
+        } else {
+        	expected_ack_sequence = -1;
+        }
 
         /*Write TX FIFO*/
         rf_if_write_frame_buffer(data_ptr, (uint8_t)data_length);
@@ -1901,9 +1905,10 @@ static void rf_handle_ack(uint8_t seq_number, uint8_t data_pending)
     phy_link_tx_status_e phy_status;
     rf_if_lock();
     /*Received ACK sequence must be equal with transmitted packet sequence*/
-    if(tx_sequence == seq_number)
+    if(expected_ack_sequence == seq_number)
     {
         rf_ack_wait_timer_stop();
+        expected_ack_sequence = -1;
         /*When data pending bit in ACK frame is set, inform NET library*/
         if(data_pending)
             phy_status = PHY_LINK_TX_DONE_PENDING;
@@ -2021,7 +2026,7 @@ static void rf_handle_tx_end(void)
 
     rf_rx_mode = 0;
     /*If ACK is needed for this transmission*/
-    if(need_ack && rf_flags_check(RFF_TX))
+    if(expected_ack_sequence != -1 && rf_flags_check(RFF_TX))
     {
         rf_ack_wait_timer_start(rf_ack_wait_duration);
         rf_rx_mode = 1;
