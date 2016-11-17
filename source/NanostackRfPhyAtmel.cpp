@@ -34,7 +34,7 @@
 /*CCA random backoff (50us units)*/
 #define RF_CCA_RANDOM_BACKOFF 51 /* 2550us */
 
-#define RF_BUFFER_SIZE 128
+#define RF_MTU 127
 
 #define RF_PHY_MODE OQPSK_SIN_250
 
@@ -43,6 +43,7 @@
 #define RFF_RX 0x02
 #define RFF_TX 0x04
 #define RFF_CCA 0x08
+#define RFF_PROT 0x10
 
 typedef enum
 {
@@ -56,7 +57,7 @@ typedef enum
 {
     ATMEL_UNKNOW_DEV = 0,
     ATMEL_AT86RF212,
-    ATMEL_AT86RF231,
+    ATMEL_AT86RF231, // No longer supported (doesn't give ED+status on frame read)
     ATMEL_AT86RF233
 }rf_trx_part_e;
 
@@ -77,8 +78,8 @@ typedef enum
     TX_ARET_ON = 0x19
 }rf_trx_states_t;
 
-/*RF receive buffer*/
-static uint8_t rf_buffer[RF_BUFFER_SIZE];
+static const uint8_t *rf_tx_data; // Points to Nanostack's buffer
+static uint8_t rf_tx_length;
 /*ACK wait duration changes depending on data rate*/
 static uint16_t rf_ack_wait_duration = RF_ACK_WAIT_DEFAULT_TIMEOUT;
 
@@ -148,6 +149,8 @@ static void rf_poll_trx_state_change(rf_trx_states_t trx_state);
 static void rf_init(void);
 static int8_t rf_device_register(const uint8_t *mac_addr);
 static void rf_device_unregister(void);
+static void rf_enable_static_frame_buffer_protection(void);
+static void rf_disable_static_frame_buffer_protection(void);
 static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, data_protocol_e data_protocol );
 static void rf_cca_abort(void);
 static void rf_calibration_cb(void);
@@ -187,22 +190,19 @@ static void rf_if_write_antenna_diversity_settings(void);
 static void rf_if_write_set_tx_power_register(uint8_t value);
 static void rf_if_write_rf_settings(void);
 static uint8_t rf_if_check_cca(void);
-static uint8_t rf_if_check_crc(void);
 static uint8_t rf_if_read_trx_state(void);
-static void rf_if_read_packet(uint8_t *ptr, uint8_t len);
+static uint16_t rf_if_read_packet(uint8_t data[RF_MTU], uint8_t *lqi_out, uint8_t *ed_out, bool *crc_good);
 static void rf_if_write_short_addr_registers(uint8_t *short_address);
 static uint8_t rf_if_last_acked_pending(void);
 static void rf_if_write_pan_id_registers(uint8_t *pan_id);
 static void rf_if_write_ieee_addr_registers(uint8_t *address);
-static void rf_if_write_frame_buffer(uint8_t *ptr, uint8_t length);
+static void rf_if_write_frame_buffer(const uint8_t *ptr, uint8_t length);
 static void rf_if_change_trx_state(rf_trx_states_t trx_state);
 static void rf_if_enable_tx_end_interrupt(void);
 static void rf_if_enable_rx_end_interrupt(void);
 static void rf_if_enable_cca_ed_done_interrupt(void);
 static void rf_if_start_cca_process(void);
-static uint8_t rf_if_read_received_frame_length(void);
-static int8_t rf_if_read_rssi(void);
-static uint8_t rf_if_read_rx_status(void);
+static int8_t rf_if_scale_rssi(uint8_t ed_level);
 static void rf_if_set_channel_register(uint8_t channel);
 static void rf_if_enable_promiscuous_mode(void);
 static void rf_if_disable_promiscuous_mode(void);
@@ -275,9 +275,6 @@ RFBits::RFBits(PinName spi_mosi, PinName spi_miso,
 
 static RFBits *rf;
 static uint8_t rf_part_num = 0;
-static uint8_t rf_rx_lqi;
-static int8_t rf_rx_rssi;
-static uint8_t rf_rx_status;
 /*TODO: RSSI Base value setting*/
 static int8_t rf_rssi_base_val = -91;
 
@@ -409,12 +406,8 @@ static rf_trx_part_e rf_radio_type_read(void)
     case PART_AT86RF212:
       ret_val = ATMEL_AT86RF212;
       break;
-
-    case PART_AT86RF231:
-      ret_val = ATMEL_AT86RF231;
-      break;
     case PART_AT86RF233:
-      ret_val = ATMEL_AT86RF231;
+      ret_val = ATMEL_AT86RF233;
       break;
     default:
       break;
@@ -482,32 +475,6 @@ static void rf_if_cca_timer_start(uint32_t slots)
 static void rf_if_ack_wait_timer_stop(void)
 {
   rf->ack_timer.detach();
-}
-
-/*
- * \brief Function reads data from the given RF SRAM address.
- *
- * \param ptr Read pointer
- * \param sram_address Read address in SRAM
- * \param len Length of the read
- *
- * \return none
- */
-static void rf_if_read_payload(uint8_t *ptr, uint8_t sram_address, uint8_t len)
-{
-  uint8_t i;
-
-  CS_SELECT();
-  rf_if_spi_exchange(0x20);
-  rf_if_spi_exchange(sram_address);
-  for(i=0; i<len; i++)
-    *ptr++ = rf_if_spi_exchange(0);
-
-  /*Read LQI and RSSI in variable*/
-  rf_rx_lqi = rf_if_spi_exchange(0);
-  rf_rx_rssi = rf_if_spi_exchange(0);
-  rf_rx_status = rf_if_spi_exchange(0);
-  CS_RELEASE();
 }
 
 /*
@@ -789,24 +756,6 @@ static uint8_t rf_if_check_cca(void)
 }
 
 /*
- * \brief Function checks if the CRC is valid in received frame
- *
- * \param none
- *
- * \return 1 CRC ok
- * \return 0 CRC failed
- */
-static uint8_t rf_if_check_crc(void)
-{
-  uint8_t retval = 0;
-  if(rf_if_read_register(PHY_RSSI) & CRC_VALID)
-  {
-    retval = 1;
-  }
-  return retval;
-}
-
-/*
  * \brief Function returns the RF state
  *
  * \param none
@@ -819,19 +768,31 @@ static uint8_t rf_if_read_trx_state(void)
 }
 
 /*
- * \brief Function reads data from RF SRAM.
+ * \brief Function reads packet buffer.
  *
- * \param ptr Read pointer
- * \param len Length of the read
+ * \param data_out Output buffer
+ * \param lqi_out LQI output
+ * \param ed_out ED output
+ * \param crc_good CRC good indication
  *
- * \return none
+ * \return PSDU length [0..RF_MTU]
  */
-static void rf_if_read_packet(uint8_t *ptr, uint8_t len)
+static uint16_t rf_if_read_packet(uint8_t data_out[RF_MTU], uint8_t *lqi_out, uint8_t *ed_out, bool *crc_good)
 {
-  if(rf_part_num == PART_AT86RF231 || rf_part_num == PART_AT86RF212)
-    rf_if_read_payload(ptr, 0, len);
-  else if(rf_part_num == PART_AT86RF233)
-    rf_if_read_payload(ptr, 1, len);
+  CS_SELECT();
+  rf_if_spi_exchange(0x20);
+  uint8_t len = rf_if_spi_exchange(0) & 0x7F;
+  uint8_t *ptr = data_out;
+  for (uint_fast8_t i = 0; i < len; i++) {
+    *ptr++ = rf_if_spi_exchange(0);
+  }
+
+  *lqi_out = rf_if_spi_exchange(0);
+  *ed_out = rf_if_spi_exchange(0);
+  *crc_good = rf_if_spi_exchange(0) & 0x80;
+  CS_RELEASE();
+
+  return len;
 }
 
 /*
@@ -935,12 +896,12 @@ static void rf_if_write_ieee_addr_registers(uint8_t *address)
 /*
  * \brief Function writes data in RF frame buffer.
  *
- * \param ptr Pointer to data
- * \param length Pointer to length
+ * \param ptr Pointer to data (PSDU, except FCS)
+ * \param length Pointer to length (PSDU length, minus 2 for FCS)
  *
  * \return none
  */
-static void rf_if_write_frame_buffer(uint8_t *ptr, uint8_t length)
+static void rf_if_write_frame_buffer(const uint8_t *ptr, uint8_t length)
 {
   uint8_t i;
   uint8_t cmd = 0x60;
@@ -1051,53 +1012,19 @@ static void rf_if_start_cca_process(void)
 }
 
 /*
- * \brief Function returns the length of the received packet
+ * \brief Function scales RSSI
  *
- * \param none
+ * \param ed_level ED level read from chip
  *
- * \return packet length
+ * \return appropriately scaled RSSI dBm
  */
-static uint8_t rf_if_read_received_frame_length(void)
+static int8_t rf_if_scale_rssi(uint8_t ed_level)
 {
-  uint8_t length;
-
-  CS_SELECT();
-  rf_if_spi_exchange(0x20);
-  length = rf_if_spi_exchange(0);
-  CS_RELEASE();
-
-  return length;
-}
-
-/*
- * \brief Function returns the RSSI of the received packet
- *
- * \param none
- *
- * \return packet RSSI
- */
-static int8_t rf_if_read_rssi(void)
-{
-  int16_t rssi_calc_tmp;
-  if(rf_part_num == PART_AT86RF212)
-    rssi_calc_tmp = rf_rx_rssi * 103;
-  else
-    rssi_calc_tmp = rf_rx_rssi * 100;
-  rssi_calc_tmp /= 100;
-  rssi_calc_tmp = (rf_rssi_base_val + rssi_calc_tmp);
-  return (int8_t)rssi_calc_tmp;
-}
-
-/*
- * \brief Function returns the RSSI of the received packet
- *
- * \param none
- *
- * \return packet RSSI
- */
-MBED_UNUSED uint8_t rf_if_read_rx_status(void)
-{
-  return rf_rx_status;
+  if (rf_part_num == PART_AT86RF212) {
+    /* Data sheet says to multiply by 1.03 - this is 1.03125, rounding down */
+    ed_level += ed_level >> 5;
+  }
+  return rf_rssi_base_val + ed_level;
 }
 
 /*
@@ -1351,6 +1278,38 @@ static void rf_device_unregister()
 }
 
 /*
+ * \brief Enable frame buffer protection
+ *
+ * If protection is enabled, reception cannot start - the radio will
+ * not go into RX_BUSY or write into the frame buffer if in receive mode.
+ * Setting this won't abort an already-started reception.
+ * We can still write the frame buffer ourselves.
+ */
+static void rf_enable_static_frame_buffer_protection(void)
+{
+  if (!rf_flags_check(RFF_PROT)) {
+    /* This also writes RX_PDT_LEVEL to 0 - maximum RX sensitivity */
+    /* Would need to modify this function if messing with that */
+    rf_if_write_register(RX_SYN, RX_PDT_DIS);
+    rf_flags_set(RFF_PROT);
+  }
+}
+
+/*
+ * \brief Disable frame buffer protection
+ */
+static void rf_disable_static_frame_buffer_protection(void)
+{
+  if (rf_flags_check(RFF_PROT)) {
+    /* This also writes RX_PDT_LEVEL to 0 - maximum RX sensitivity */
+    /* Would need to modify this function if messing with that */
+    rf_if_write_register(RX_SYN, 0);
+    rf_flags_clear(RFF_PROT);
+  }
+}
+
+
+/*
  * \brief Function is a call back for ACK wait timeout.
  *
  * \param none
@@ -1395,17 +1354,24 @@ static void rf_calibration_timer_interrupt(void)
  */
 static void rf_cca_timer_interrupt(void)
 {
-    /*Start CCA process*/
+    /*Disable reception - locks against entering BUSY_RX and overwriting frame buffer*/
+    rf_enable_static_frame_buffer_protection();
+
     if(rf_if_read_trx_state() == BUSY_RX_AACK)
     {
+        /*Reception already started - re-enable reception and say CCA fail*/
+        rf_disable_static_frame_buffer_protection();
         if(device_driver.phy_tx_done_cb){
             device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
         }
     }
     else
     {
-        /*Set radio in RX state to read channel*/
+        /*Load the frame buffer with frame to transmit */
+        rf_if_write_frame_buffer(rf_tx_data, rf_tx_length);
+        /*Make sure we're in RX state to read channel (any way we could not be?)*/
         rf_receive();
+        /*Start CCA process*/
         rf_if_enable_cca_ed_done_interrupt();
         rf_if_start_cca_process();
     }
@@ -1678,8 +1644,8 @@ static void rf_poll_trx_state_change(rf_trx_states_t trx_state)
 /*
  * \brief Function starts the CCA process before starting data transmission and copies the data to RF TX FIFO.
  *
- * \param data_ptr Pointer to TX data
- * \param data_length Length of the TX data
+ * \param data_ptr Pointer to TX data (excluding FCS)
+ * \param data_length Length of the TX data (excluding FCS)
  * \param tx_handle Handle to transmission
  * \return 0 Success
  * \return -1 Busy
@@ -1689,7 +1655,7 @@ static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_h
     (void)data_protocol;
     rf_if_lock();
     /*Check if transmitter is busy*/
-    if(rf_if_read_trx_state() == BUSY_RX_AACK)
+    if(rf_if_read_trx_state() == BUSY_RX_AACK || data_length > RF_MTU - 2)
     {
         rf_if_unlock();
         /*Return busy*/
@@ -1697,20 +1663,12 @@ static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_h
     }
     else
     {
-        /*Check if transmitted data needs to be acked*/
-        if(*data_ptr & 0x20) {
-            /*Store the sequence number for ACK handling*/
-            expected_ack_sequence = *(data_ptr + 2);
-            // TODO - when frame buffer write done after backoff, expected_ack_sequence should only
-            // be set once reception is disabled - at present this could handle an ACK before
-            // we actually transmit. But that's just another facet of us receiving packets while
-            // in backoff.
-        } else {
-        	expected_ack_sequence = -1;
-        }
+        expected_ack_sequence = -1;
 
-        /*Write TX FIFO*/
-        rf_if_write_frame_buffer(data_ptr, (uint8_t)data_length);
+        /*Nanostack has a static TX buffer, which will remain valid until we*/
+        /*generate a callback, so we just note the pointer for reading later.*/
+        rf_tx_data = data_ptr;
+        rf_tx_length = data_length;
         rf_flags_set(RFF_CCA);
         /*Start CCA timeout*/
         rf_cca_timer_start(RF_CCA_BASE_BACKOFF + randLIB_get_random_in_range(0, RF_CCA_RANDOM_BACKOFF));
@@ -1734,6 +1692,7 @@ static void rf_cca_abort(void)
 {
     /*Clear RFF_CCA RF flag*/
     rf_flags_clear(RFF_CCA);
+    rf_disable_static_frame_buffer_protection();
 }
 
 /*
@@ -1749,6 +1708,7 @@ static void rf_start_tx(void)
     uint8_t trx_state = rf_if_read_trx_state();
     if(trx_state != RX_AACK_ON)
     {
+        rf_disable_static_frame_buffer_protection();
         if(device_driver.phy_tx_done_cb){
             device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
         }
@@ -1758,6 +1718,8 @@ static void rf_start_tx(void)
         /*RF state change: ->PLL_ON->RF_TX_START*/
         rf_if_change_trx_state(FORCE_PLL_ON);
         rf_flags_clear(RFF_RX);
+        /*Now we're out of receive mode, can release protection*/
+        rf_disable_static_frame_buffer_protection();
         rf_if_enable_tx_end_interrupt();
         rf_flags_set(RFF_TX);
         rf_if_change_trx_state(RF_TX_START);
@@ -1932,71 +1894,44 @@ static void rf_handle_ack(uint8_t seq_number, uint8_t data_pending)
  */
 static void rf_handle_rx_end(void)
 {
-    uint8_t rf_lqi = 0;
-    int8_t rf_rssi = 0;
-
     /*Start receiver*/
     rf_flags_clear(RFF_RX);
     rf_receive();
 
     /*Frame received interrupt*/
-    if(rf_flags_check(RFF_RX))
+    if(!rf_flags_check(RFF_RX)) {
+        return;
+    }
+
+    static uint8_t rf_buffer[RF_MTU];
+    uint8_t rf_lqi, rf_ed;
+    int8_t rf_rssi;
+    bool crc_good;
+
+    /*Read received packet*/
+    uint8_t len = rf_if_read_packet(rf_buffer, &rf_lqi, &rf_ed, &crc_good);
+    if (len < 5 || !crc_good) {
+        return;
+    }
+
+    /* Convert raw ED to dBm value (chip-dependent) */
+    rf_rssi = rf_if_scale_rssi(rf_ed);
+
+    /* Create a virtual LQI using received RSSI, forgetting actual HW LQI */
+    /* (should be done through PHY_EXTENSION_CONVERT_SIGNAL_INFO) */
+    rf_lqi = rf_scale_lqi(rf_rssi);
+
+    /*Handle received ACK*/
+    if((rf_buffer[0] & 0x07) == 0x02 && rf_mode != RF_MODE_SNIFFER)
     {
-        /*Check CRC_valid bit*/
-        if(rf_if_check_crc())
-        {
-            uint8_t *rf_rx_ptr;
-            uint8_t receiving_ack = 0;
-            /*Read length*/
-            uint8_t len = rf_if_read_received_frame_length();
+        /*Check if data is pending*/
+        bool pending = (rf_buffer[0] & 0x10);
 
-            rf_rx_ptr = rf_buffer;
-            /*ACK frame*/
-            if(len == 5)
-            {
-                /*Read ACK in static ACK buffer*/
-                receiving_ack = 1;
-            }
-            /*Check the length is valid*/
-            if(len > 1 && len < RF_BUFFER_SIZE)
-            {
-                /*Read received packet*/
-                rf_if_read_packet(rf_rx_ptr, len);
-
-                if(!receiving_ack)
-                {
-                    rf_rssi = rf_if_read_rssi();
-                    /*Scale LQI using received RSSI*/
-                    rf_lqi = rf_scale_lqi(rf_rssi);
-                }
-                if(rf_mode == RF_MODE_SNIFFER)
-                {
-                    if( device_driver.phy_rx_cb ){
-                        device_driver.phy_rx_cb(rf_buffer,len - 2, rf_lqi, rf_rssi, rf_radio_driver_id);
-                    }
-                }
-                else
-                {
-                    /*Handle received ACK*/
-                    if(receiving_ack && ((rf_buffer[0] & 0x07) == 0x02))
-                    {
-                        uint8_t pending = 0;
-                        /*Check if data is pending*/
-                        if ((rf_buffer[0] & 0x10))
-                        {
-                            pending=1;
-                        }
-                        /*Send sequence number in ACK handler*/
-                        rf_handle_ack(rf_buffer[2], pending);
-                    }
-                    else
-                    {
-                        if( device_driver.phy_rx_cb ){
-                            device_driver.phy_rx_cb(rf_buffer,len - 2, rf_lqi, rf_rssi, rf_radio_driver_id);
-                        }
-                    }
-                }
-            }
+        /*Send sequence number in ACK handler*/
+        rf_handle_ack(rf_buffer[2], pending);
+    } else {
+        if( device_driver.phy_rx_cb ){
+            device_driver.phy_rx_cb(rf_buffer, len - 2, rf_lqi, rf_rssi, rf_radio_driver_id);
         }
     }
 }
@@ -2023,12 +1958,11 @@ static void rf_shutdown(void)
  */
 static void rf_handle_tx_end(void)
 {
-    phy_link_tx_status_e phy_status = PHY_LINK_TX_SUCCESS;
-
     rf_rx_mode = 0;
     /*If ACK is needed for this transmission*/
-    if(expected_ack_sequence != -1 && rf_flags_check(RFF_TX))
+    if((rf_tx_data[0] & 0x20) && rf_flags_check(RFF_TX))
     {
+        expected_ack_sequence = rf_tx_data[2];
         rf_ack_wait_timer_start(rf_ack_wait_duration);
         rf_rx_mode = 1;
     }
@@ -2038,7 +1972,7 @@ static void rf_handle_tx_end(void)
 
     /*Call PHY TX Done API*/
     if(device_driver.phy_tx_done_cb){
-        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, phy_status, 0, 0);
+        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_TX_SUCCESS, 0, 0);
     }
 }
 
@@ -2059,6 +1993,8 @@ static void rf_handle_cca_ed_done(void)
     }
     else
     {
+        /*Re-enable reception*/
+        rf_disable_static_frame_buffer_protection();
         /*Send CCA fail notification*/
         if(device_driver.phy_tx_done_cb){
             device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);

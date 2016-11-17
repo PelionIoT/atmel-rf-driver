@@ -138,6 +138,9 @@ extern "C" {
 /*PHY_RSSI bits*/
 #define CRC_VALID                   0x80
 
+/*RX_SYN bits*/
+#define RX_PDT_DIS                  0x80
+
 /*XAH_CTRL_1 bits*/
 #define AACK_PROM_MODE              0x02
 
