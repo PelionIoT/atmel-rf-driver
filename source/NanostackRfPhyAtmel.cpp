@@ -1399,7 +1399,7 @@ static void rf_cca_timer_interrupt(void)
     if(rf_if_read_trx_state() == BUSY_RX_AACK)
     {
         if(device_driver.phy_tx_done_cb){
-            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 1, 1);
+            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
         }
     }
     else
@@ -1745,7 +1745,7 @@ static void rf_start_tx(void)
     if(trx_state != RX_AACK_ON)
     {
         if(device_driver.phy_tx_done_cb){
-            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 1, 1);
+            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
         }
     }
     else
@@ -1911,7 +1911,7 @@ static void rf_handle_ack(uint8_t seq_number, uint8_t data_pending)
             phy_status = PHY_LINK_TX_DONE;
         /*Call PHY TX Done API*/
         if(device_driver.phy_tx_done_cb){
-            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle,phy_status, 1, 1);
+            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle,phy_status, 0, 0);
         }
     }
     rf_if_unlock();
@@ -2032,7 +2032,7 @@ static void rf_handle_tx_end(void)
 
     /*Call PHY TX Done API*/
     if(device_driver.phy_tx_done_cb){
-        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, phy_status, 1, 1);
+        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, phy_status, 0, 0);
     }
 }
 
@@ -2055,7 +2055,7 @@ static void rf_handle_cca_ed_done(void)
     {
         /*Send CCA fail notification*/
         if(device_driver.phy_tx_done_cb){
-            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 1, 1);
+            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
         }
     }
 }
