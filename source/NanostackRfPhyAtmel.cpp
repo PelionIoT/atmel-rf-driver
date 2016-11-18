@@ -1687,15 +1687,16 @@ static void rf_poll_trx_state_change(rf_trx_states_t trx_state)
 static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, data_protocol_e data_protocol )
 {
     (void)data_protocol;
+    rf_if_lock();
     /*Check if transmitter is busy*/
     if(rf_if_read_trx_state() == BUSY_RX_AACK)
     {
+        rf_if_unlock();
         /*Return busy*/
         return -1;
     }
     else
     {
-        rf_if_lock();
         /*Check if transmitted data needs to be acked*/
         if(*data_ptr & 0x20) {
             /*Store the sequence number for ACK handling*/
