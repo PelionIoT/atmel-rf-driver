@@ -466,6 +466,16 @@ static void rf_if_cca_timer_start(uint32_t slots)
 }
 
 /*
+ * \brief Function stops the CCA interval.
+ *
+ * \return none
+ */
+static void rf_if_cca_timer_stop(void)
+{
+  rf->cca_timer.detach();
+}
+
+/*
  * \brief Function stops the ACK wait timeout.
  *
  * \param none
@@ -1369,6 +1379,7 @@ static void rf_cca_timer_interrupt(void)
         rf_if_write_frame_buffer(rf_tx_data, rf_tx_length);
         /*Make sure we're in RX state to read channel (any way we could not be?)*/
         rf_receive();
+        rf_flags_set(RFF_CCA);
         /*Start CCA process*/
         rf_if_enable_cca_ed_done_interrupt();
         rf_if_start_cca_process();
@@ -1400,7 +1411,7 @@ static void rf_calibration_timer_start(uint32_t slots)
 }
 
 /*
- * \brief Function starts the CCA timout.
+ * \brief Function starts the CCA backoff.
  *
  * \param slots Given slots, resolution 50us
  *
@@ -1409,6 +1420,16 @@ static void rf_calibration_timer_start(uint32_t slots)
 static void rf_cca_timer_start(uint32_t slots)
 {
     rf_if_cca_timer_start(slots);
+}
+
+/*
+ * \brief Function stops the CCA backoff.
+ *
+ * \return none
+ */
+static void rf_cca_timer_stop(void)
+{
+    rf_if_cca_timer_stop();
 }
 
 /*
@@ -1667,7 +1688,6 @@ static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_h
         /*generate a callback, so we just note the pointer for reading later.*/
         rf_tx_data = data_ptr;
         rf_tx_length = data_length;
-        rf_flags_set(RFF_CCA);
         /*Start CCA timeout*/
         rf_cca_timer_start(RF_CCA_BASE_BACKOFF + randLIB_get_random_in_range(0, RF_CCA_RANDOM_BACKOFF));
         /*Store TX handle*/
@@ -1688,7 +1708,7 @@ static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_h
  */
 static void rf_cca_abort(void)
 {
-    /*Clear RFF_CCA RF flag*/
+    rf_cca_timer_stop();
     rf_flags_clear(RFF_CCA);
     rf_disable_static_frame_buffer_protection();
 }
@@ -1790,9 +1810,6 @@ static void rf_receive(void)
         }
         rf_if_unlock();
     }
-    /*Stop the running CCA process*/
-    if(rf_flags_check(RFF_CCA))
-        rf_cca_abort();
 }
 
 /*
@@ -1983,6 +2000,9 @@ static void rf_handle_tx_end(void)
  */
 static void rf_handle_cca_ed_done(void)
 {
+    if (!rf_flags_check(RFF_CCA)) {
+        return;
+    }
     rf_flags_clear(RFF_CCA);
     /*Check the result of CCA process*/
     if(rf_if_check_cca())
@@ -2071,6 +2091,7 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
             rf_channel_set(rf_channel);
             rf_flags_clear(RFF_RX);
             rf_receive();
+            rf_if_enable_irq();
             break;
     }
     return ret_val;
