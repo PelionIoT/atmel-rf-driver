@@ -504,9 +504,7 @@ static void rf_if_set_bit(uint8_t addr, uint8_t bit, uint8_t bit_mask)
  */
 static void rf_if_clear_bit(uint8_t addr, uint8_t bit)
 {
-  uint8_t reg = rf_if_read_register(addr);
-  reg &= ~bit;
-  rf_if_write_register(addr, reg);
+  rf_if_set_bit(addr, 0, bit);
 }
 
 /*
@@ -972,7 +970,7 @@ static void rf_if_change_trx_state(rf_trx_states_t trx_state)
  */
 static void rf_if_enable_tx_end_interrupt(void)
 {
-  rf_if_set_bit(IRQ_MASK, TRX_END, 0x08);
+  rf_if_set_bit(IRQ_MASK, TRX_END, TRX_END);
 }
 
 /*
@@ -984,7 +982,7 @@ static void rf_if_enable_tx_end_interrupt(void)
  */
 static void rf_if_enable_rx_end_interrupt(void)
 {
-  rf_if_set_bit(IRQ_MASK, TRX_END, 0x08);
+  rf_if_set_bit(IRQ_MASK, TRX_END, TRX_END);
 }
 
 /*
@@ -996,7 +994,7 @@ static void rf_if_enable_rx_end_interrupt(void)
  */
 static void rf_if_enable_cca_ed_done_interrupt(void)
 {
-  rf_if_set_bit(IRQ_MASK, CCA_ED_DONE, 0x10);
+  rf_if_set_bit(IRQ_MASK, CCA_ED_DONE, CCA_ED_DONE);
 }
 
 /*
@@ -1008,7 +1006,7 @@ static void rf_if_enable_cca_ed_done_interrupt(void)
  */
 static void rf_if_start_cca_process(void)
 {
-  rf_if_set_bit(PHY_CC_CCA, CCA_REQUEST, 0x80);
+  rf_if_set_bit(PHY_CC_CCA, CCA_REQUEST, CCA_REQUEST);
 }
 
 /*
@@ -2064,7 +2062,7 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
             // Read status to clear pending flags.
             rf_if_read_register(IRQ_STATUS);
             // Must set interrupt mask to be able to read IRQ status. GPIO interrupt is disabled.
-            rf_if_set_bit(IRQ_MASK, CCA_ED_DONE, CCA_ED_DONE);
+            rf_if_enable_cca_ed_done_interrupt();
             // ED can be initiated by writing arbitrary value to PHY_ED_LEVEL
             rf_if_write_register(PHY_ED_LEVEL, 0xff);
             break;
