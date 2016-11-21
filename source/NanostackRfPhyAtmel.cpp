@@ -427,9 +427,9 @@ static rf_trx_part_e rf_radio_type_read(void)
 static void rf_if_ack_wait_timer_start(uint16_t slots)
 {
 #ifdef MBED_CONF_RTOS_PRESENT
-  rf->ack_timer.attach(rf_if_ack_timer_signal, slots*50e-6);
+  rf->ack_timer.attach_us(rf_if_ack_timer_signal, slots*50);
 #else
-  rf->ack_timer.attach(rf_ack_wait_timer_interrupt, slots*50e-6);
+  rf->ack_timer.attach_us(rf_ack_wait_timer_interrupt, slots*50);
 #endif
 }
 
@@ -443,9 +443,9 @@ static void rf_if_ack_wait_timer_start(uint16_t slots)
 static void rf_if_calibration_timer_start(uint32_t slots)
 {
 #ifdef MBED_CONF_RTOS_PRESENT
-  rf->cal_timer.attach(rf_if_cal_timer_signal, slots*50e-6);
+  rf->cal_timer.attach_us(rf_if_cal_timer_signal, slots*50);
 #else
-  rf->cal_timer.attach(rf_calibration_timer_interrupt, slots*50e-6);
+  rf->cal_timer.attach_us(rf_calibration_timer_interrupt, slots*50);
 #endif
 }
 
@@ -459,9 +459,9 @@ static void rf_if_calibration_timer_start(uint32_t slots)
 static void rf_if_cca_timer_start(uint32_t slots)
 {
 #ifdef MBED_CONF_RTOS_PRESENT
-  rf->cca_timer.attach(rf_if_cca_timer_signal, slots*50e-6);
+  rf->cca_timer.attach_us(rf_if_cca_timer_signal, slots*50);
 #else
-  rf->cca_timer.attach(rf_cca_timer_interrupt, slots*50e-6);
+  rf->cca_timer.attach_us(rf_cca_timer_interrupt, slots*50);
 #endif
 }
 
@@ -556,14 +556,14 @@ static void rf_if_reset_radio(void)
   rf->spi.frequency(SPI_SPEED);
   rf->IRQ.rise(0);
   rf->RST = 1;
-  wait(10e-4);
+  wait_ms(1);
   rf->RST = 0;
-  wait(10e-3);
+  wait_ms(10);
   CS_RELEASE();
   rf->SLP_TR = 0;
-  wait(10e-3);
+  wait_ms(10);
   rf->RST = 1;
-  wait(10e-3);
+  wait_ms(10);
 
   rf->IRQ.rise(&rf_if_interrupt_handler);
 }
@@ -933,15 +933,15 @@ static uint8_t rf_if_read_rnd(void)
     rf_if_write_register(TRX_RPC, 0xc1);
   }
 
-  wait(1e-3);
+  wait_ms(1);
   temp = ((rf_if_read_register(PHY_RSSI)>>5) << 6);
-  wait(1e-3);
+  wait_ms(1);
   temp |= ((rf_if_read_register(PHY_RSSI)>>5) << 4);
-  wait(1e-3);
+  wait_ms(1);
   temp |= ((rf_if_read_register(PHY_RSSI)>>5) << 2);
-  wait(1e-3);
+  wait_ms(1);
   temp |= ((rf_if_read_register(PHY_RSSI)>>5));
-  wait(1e-3);
+  wait_ms(1);
   if(rf_part_num == PART_AT86RF233)
     rf_if_write_register(TRX_RPC, tmp_rpc_val);
   return temp;
