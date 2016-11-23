@@ -141,6 +141,15 @@ extern "C" {
 /*RX_SYN bits*/
 #define RX_PDT_DIS                  0x80
 
+/*TRX_RPC bits */
+#define RX_RPC_CTRL                 0xC0
+#define RX_RPC_EN                   0x20
+#define PDT_RPC_EN                  0x10
+#define PLL_RPC_EN                  0x08
+#define XAH_TX_RPC_EN               0x04
+#define IPAN_RPC_EN                 0x02
+#define TRX_RPC_RSVD_1              0x01
+
 /*XAH_CTRL_1 bits*/
 #define AACK_PROM_MODE              0x02
 

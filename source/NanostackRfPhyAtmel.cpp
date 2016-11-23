@@ -737,8 +737,12 @@ static void rf_if_write_rf_settings(void)
   /*2.4GHz RF settings*/
   else
   {
+#if 0
+    /* Disable power saving functions for now - can only impact reliability,
+     * and don't have any users demanding it. */
     /*Set RPC register*/
-    rf_if_write_register(TRX_RPC, 0xef);
+    rf_if_write_register(TRX_RPC, RX_RPC_CTRL|RX_RPC_EN|PLL_RPC_EN|XAH_TX_RPC_EN|IPAN_RPC_EN|TRX_RPC_RSVD_1);
+#endif
     /*PHY Mode: IEEE 802.15.4 - Data Rate 250 kb/s*/
     rf_if_write_register(TRX_CTRL_2, 0);
     rf_rssi_base_val = -91;
@@ -938,7 +942,7 @@ static uint8_t rf_if_read_rnd(void)
   if(rf_part_num == PART_AT86RF233)
   {
     tmp_rpc_val = rf_if_read_register(TRX_RPC);
-    rf_if_write_register(TRX_RPC, 0xc1);
+    rf_if_write_register(TRX_RPC, RX_RPC_CTRL|TRX_RPC_RSVD_1);
   }
 
   wait_ms(1);
