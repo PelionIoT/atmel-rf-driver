@@ -269,7 +269,7 @@ RFBits::RFBits(PinName spi_mosi, PinName spi_miso,
 #endif
 {
 #ifdef MBED_CONF_RTOS_PRESENT
-    irq_thread.start(this, &RFBits::rf_if_irq_task);
+    irq_thread.start(mbed::callback(this, &RFBits::rf_if_irq_task));
 #endif
 }
 
@@ -968,6 +968,7 @@ static uint8_t rf_if_read_rnd(void)
  */
 static void rf_if_change_trx_state(rf_trx_states_t trx_state)
 {
+  // XXX Lock claim apparently not required
   rf_if_lock();
   rf_if_write_register(TRX_STATE, trx_state);
   /*Wait while not in desired state*/
@@ -1645,6 +1646,7 @@ static void rf_off(void)
 static void rf_poll_trx_state_change(rf_trx_states_t trx_state)
 {
     uint16_t while_counter = 0;
+    // XXX lock apparently not needed
     rf_if_lock();
 
     if(trx_state != RF_TX_START)
