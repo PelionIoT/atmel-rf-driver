@@ -22,6 +22,7 @@
 #include "randLIB.h"
 #include "AT86RFReg.h"
 #include "nanostack/platform/arm_hal_phy.h"
+#include "mbed_assert.h"
 
 /*Worst case sensitivity*/
 #define RF_DEFAULT_SENSITIVITY -88
@@ -258,7 +259,8 @@ RFBits::RFBits(PinName spi_mosi, PinName spi_miso,
         IRQ(spi_irq),
         irq_thread(osPriorityRealtime, 1024)
 {
-    irq_thread.start(mbed::callback(this, &RFBits::rf_if_irq_task));
+    osStatus_t status = irq_thread.start(mbed::callback(this, &RFBits::rf_if_irq_task));
+    MBED_ASSERT(status == osOK);
 }
 
 static RFBits *rf;
@@ -278,7 +280,6 @@ static void rf_if_unlock(void)
     platform_exit_critical();
 }
 
-#ifdef MBED_CONF_RTOS_PRESENT
 static void rf_if_cca_timer_signal(void)
 {
     rf->irq_thread.signal_set(SIG_TIMER_CCA);
@@ -293,8 +294,6 @@ static void rf_if_ack_timer_signal(void)
 {
     rf->irq_thread.signal_set(SIG_TIMER_ACK);
 }
-#endif
-
 
 /* Delay functions for RF Chip SPI access */
 #ifdef __CC_ARM
@@ -1075,7 +1074,7 @@ static void rf_if_interrupt_handler(void)
 void RFBits::rf_if_irq_task(void)
 {
     for (;;) {
-        uint32_t event = irq_thread.signal_wait(SIG_TIMER_ACK|SIG_TIMER_CCA|SIG_TIMER_CAL);
+        uint32_t event = irq_thread.signal_wait(0);
 
         rf_if_lock();
         if (event & SIG_RADIO) {
