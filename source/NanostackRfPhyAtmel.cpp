@@ -21,7 +21,7 @@
 #include "randLIB.h"
 #include "AT86RFReg.h"
 #include "nanostack/platform/arm_hal_phy.h"
-#include "toolchain.h"
+#include "mbed_toolchain.h"
 
 /*Worst case sensitivity*/
 #define RF_DEFAULT_SENSITIVITY -88
@@ -1087,21 +1087,21 @@ static void rf_if_interrupt_handler(void)
 void RFBits::rf_if_irq_task(void)
 {
     for (;;) {
-        osEvent event = irq_thread.signal_wait(0);
-        if (event.status != osEventSignal) {
+        uint32_t signal = irq_thread.signal_wait(0);
+        if (signal & osFlagsError) {
             continue;
         }
         rf_if_lock();
-        if (event.value.signals & SIG_RADIO) {
+        if (signal & SIG_RADIO) {
             rf_if_irq_task_process_irq();
         }
-        if (event.value.signals & SIG_TIMER_ACK) {
+        if (signal & SIG_TIMER_ACK) {
             rf_ack_wait_timer_interrupt();
         }
-        if (event.value.signals & SIG_TIMER_CCA) {
+        if (signal & SIG_TIMER_CCA) {
             rf_cca_timer_interrupt();
         }
-        if (event.value.signals & SIG_TIMER_CAL) {
+        if (signal & SIG_TIMER_CAL) {
             rf_calibration_timer_interrupt();
         }
         rf_if_unlock();
