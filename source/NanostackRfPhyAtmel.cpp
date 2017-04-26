@@ -1074,19 +1074,21 @@ static void rf_if_interrupt_handler(void)
 void RFBits::rf_if_irq_task(void)
 {
     for (;;) {
-        uint32_t event = irq_thread.signal_wait(0);
+        osEvent event = irq_thread.signal_wait(0);
+        if (event.status == osErrorTimeout)
+          continue;
 
         rf_if_lock();
-        if (event & SIG_RADIO) {
+        if (event.value.signals & SIG_RADIO) {
             rf_if_irq_task_process_irq();
         }
-        if (event & SIG_TIMER_ACK) {
+        if (event.value.signals & SIG_TIMER_ACK) {
             rf_ack_wait_timer_interrupt();
         }
-        if (event & SIG_TIMER_CCA) {
+        if (event.value.signals & SIG_TIMER_CCA) {
             rf_cca_timer_interrupt();
         }
-        if (event & SIG_TIMER_CAL) {
+        if (event.value.signals & SIG_TIMER_CAL) {
             rf_calibration_timer_interrupt();
         }
         rf_if_unlock();
