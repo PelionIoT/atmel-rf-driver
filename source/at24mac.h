@@ -18,6 +18,17 @@
 
 #include "PinNames.h"
 #include "I2C.h"
+#include "drivers/DigitalInOut.h"
+#include "platform/mbed_wait_api.h"
+
+/*
+ * Dummy class to allow us to reset I2C before the I2C constructor is called in
+ * the initializer list of AT24Mac's constructor
+ */
+class AtmelI2CReset {
+public:
+    AtmelI2CReset(PinName sda, PinName scl);
+};
 
 /*
  * AT24MAC drivers.
@@ -57,6 +68,7 @@ public:
     int read_eui48(void *buf);
 
 private:
+    AtmelI2CReset atmel_i2c_reset;
     mbed::I2C _i2c;
 };
 

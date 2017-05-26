@@ -29,7 +29,27 @@
 #define EUI64_LEN 8
 #define EUI48_LEN 6
 
-AT24Mac::AT24Mac(PinName sda, PinName scl) : _i2c(sda, scl)
+AtmelI2CReset::AtmelI2CReset(PinName sda, PinName scl)
+{
+    mbed::DigitalInOut SDA(sda, PIN_OUTPUT, PullUp, 1);
+    mbed::DigitalInOut SCL(scl, PIN_OUTPUT, PullUp, 0);
+    //generate 9 clocks for worst-case scenario
+    for (int i = 0; i < 10; ++i) {
+        SCL = 1;
+        wait_us(5);
+        SCL = 0;
+        wait_us(5);
+    }
+    //generate a STOP condition
+    SDA = 0;
+    wait_us(5);
+    SCL = 1;
+    wait_us(5);
+    SDA = 1;
+    wait_us(5);
+}
+
+AT24Mac::AT24Mac(PinName sda, PinName scl) : atmel_i2c_reset(sda, scl), _i2c(sda, scl)
 {
     // Do nothing
 }
