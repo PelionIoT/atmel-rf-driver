@@ -29,7 +29,7 @@
 #define EUI64_LEN 8
 #define EUI48_LEN 6
 
-AtmelI2CReset::AtmelI2CReset(PinName sda, PinName scl)
+AT24Mac::I2CReset::I2CReset(PinName sda, PinName scl)
 {
     mbed::DigitalInOut SDA(sda, PIN_OUTPUT, PullUp, 1);
     mbed::DigitalInOut SCL(scl, PIN_OUTPUT, PullUp, 0);
@@ -49,7 +49,7 @@ AtmelI2CReset::AtmelI2CReset(PinName sda, PinName scl)
     wait_us(5);
 }
 
-AT24Mac::AT24Mac(PinName sda, PinName scl) : atmel_i2c_reset(sda, scl), _i2c(sda, scl)
+AT24Mac::AT24Mac(PinName sda, PinName scl) : i2c_reset(sda, scl), _i2c(sda, scl)
 {
     // Do nothing
 }
