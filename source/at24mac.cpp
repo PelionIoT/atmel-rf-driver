@@ -29,7 +29,30 @@
 #define EUI64_LEN 8
 #define EUI48_LEN 6
 
-AT24Mac::AT24Mac(PinName sda, PinName scl) : _i2c(sda, scl)
+AT24Mac::I2CReset::I2CReset(PinName sda, PinName scl)
+{
+    mbed::DigitalInOut SDA(sda, PIN_OUTPUT, PullUp, 1);
+    mbed::DigitalInOut SCL(scl, PIN_OUTPUT, PullUp, 0);
+    //generate 9 clocks for worst-case scenario
+    for (int i = 0; i < 10; ++i) {
+        SCL = 1;
+        wait_us(5);
+        SCL = 0;
+        wait_us(5);
+    }
+    //generate a STOP condition
+    SDA = 0;
+    wait_us(5);
+    SCL = 1;
+    wait_us(5);
+    SDA = 1;
+    wait_us(5);
+}
+
+/*I2C needs to be reset before constructing the I2C object (in case I2C is stuck)
+  because they use the same pins, therefore i2c_reset has to be before _i2c
+  in the initializer list*/
+AT24Mac::AT24Mac(PinName sda, PinName scl) : i2c_reset(sda, scl), _i2c(sda, scl)
 {
     // Do nothing
 }
