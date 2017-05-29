@@ -49,9 +49,9 @@ AT24Mac::I2CReset::I2CReset(PinName sda, PinName scl)
     wait_us(5);
 }
 
-/*I2C needs to be reset before constructing the I2C object (in case it's stuck)
-  because they use the same pins, a dummy class 'I2CReset' and a member 'i2c_reset'
-  are used to achieve this*/
+/*I2C needs to be reset before constructing the I2C object (in case I2C is stuck)
+  because they use the same pins, therefore i2c_reset has to be before _i2c
+  in the initializer list*/
 AT24Mac::AT24Mac(PinName sda, PinName scl) : i2c_reset(sda, scl), _i2c(sda, scl)
 {
     // Do nothing
