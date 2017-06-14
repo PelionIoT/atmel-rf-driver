@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "mbed.h"
 #include <string.h>
 #include "platform/arm_hal_interrupt.h"
 #include "nanostack/platform/arm_hal_phy.h"
@@ -21,7 +22,7 @@
 #include "randLIB.h"
 #include "AT86RFReg.h"
 #include "nanostack/platform/arm_hal_phy.h"
-#include "toolchain.h"
+#include "mbed_assert.h"
 
 /*Worst case sensitivity*/
 #define RF_DEFAULT_SENSITIVITY -88
@@ -209,11 +210,6 @@ static void rf_if_disable_promiscuous_mode(void);
 static uint8_t rf_if_read_part_num(void);
 static void rf_if_enable_irq(void);
 static void rf_if_disable_irq(void);
-
-#ifdef MBED_CONF_RTOS_PRESENT
-#include "mbed.h"
-#include "rtos.h"
-
 static void rf_if_irq_task_process_irq();
 
 #define SIG_RADIO       1
@@ -223,7 +219,6 @@ static void rf_if_irq_task_process_irq();
 
 #define SIG_TIMERS (SIG_TIMER_ACK|SIG_TIMER_CAL|SIG_TIMER_CCA)
 #define SIG_ALL (SIG_RADIO|SIG_TIMERS)
-#endif
 
 // HW pins to RF chip
 #define SPI_SPEED 7500000
@@ -249,11 +244,9 @@ public:
     Timeout ack_timer;
     Timeout cal_timer;
     Timeout cca_timer;
-#ifdef MBED_CONF_RTOS_PRESENT
     Thread irq_thread;
     Mutex mutex;
     void rf_if_irq_task();
-#endif
 };
 
 RFBits::RFBits(PinName spi_mosi, PinName spi_miso,
@@ -263,14 +256,11 @@ RFBits::RFBits(PinName spi_mosi, PinName spi_miso,
         CS(spi_cs),
         RST(spi_rst),
         SLP_TR(spi_slp),
-        IRQ(spi_irq)
-#ifdef MBED_CONF_RTOS_PRESENT
-,irq_thread(osPriorityRealtime, 1024)
-#endif
+        IRQ(spi_irq),
+        irq_thread(osPriorityRealtime, 1024)
 {
-#ifdef MBED_CONF_RTOS_PRESENT
-    irq_thread.start(mbed::callback(this, &RFBits::rf_if_irq_task));
-#endif
+    osStatus_t status = irq_thread.start(mbed::callback(this, &RFBits::rf_if_irq_task));
+    MBED_ASSERT(status == osOK);
 }
 
 static RFBits *rf;
@@ -290,7 +280,6 @@ static void rf_if_unlock(void)
     platform_exit_critical();
 }
 
-#ifdef MBED_CONF_RTOS_PRESENT
 static void rf_if_cca_timer_signal(void)
 {
     rf->irq_thread.signal_set(SIG_TIMER_CCA);
@@ -305,8 +294,6 @@ static void rf_if_ack_timer_signal(void)
 {
     rf->irq_thread.signal_set(SIG_TIMER_ACK);
 }
-#endif
-
 
 /* Delay functions for RF Chip SPI access */
 #ifdef __CC_ARM
@@ -1088,9 +1075,9 @@ void RFBits::rf_if_irq_task(void)
 {
     for (;;) {
         osEvent event = irq_thread.signal_wait(0);
-        if (event.status != osEventSignal) {
-            continue;
-        }
+        if (event.status == osErrorTimeout)
+          continue;
+
         rf_if_lock();
         if (event.value.signals & SIG_RADIO) {
             rf_if_irq_task_process_irq();
