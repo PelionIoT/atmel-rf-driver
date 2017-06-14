@@ -132,6 +132,9 @@ extern "C" {
 /*TRX_CTRL_1 bits*/
 #define PA_EXT_EN                   0x80
 
+/*TRX_CTRL_2 bits*/
+#define RX_SAFE_MODE                0x80
+
 /*FTN_CTRL bits*/
 #define FTN_START                   0x80
 
