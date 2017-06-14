@@ -730,7 +730,7 @@ static void rf_if_write_rf_settings(void)
     }
 
     /*PHY Mode: IEEE 802.15.4-2006/2011 - OQPSK-SIN-250*/
-    rf_if_write_register(TRX_CTRL_2, RF_PHY_MODE);
+    rf_if_write_register(TRX_CTRL_2, RX_SAFE_MODE | RF_PHY_MODE);
     /*Based on receiver Characteristics. See AT86RF212B Datasheet where RSSI BASE VALUE in range -97 - -100 dBm*/
     rf_rssi_base_val = -98;
   }
@@ -744,7 +744,7 @@ static void rf_if_write_rf_settings(void)
     rf_if_write_register(TRX_RPC, RX_RPC_CTRL|RX_RPC_EN|PLL_RPC_EN|XAH_TX_RPC_EN|IPAN_RPC_EN|TRX_RPC_RSVD_1);
 #endif
     /*PHY Mode: IEEE 802.15.4 - Data Rate 250 kb/s*/
-    rf_if_write_register(TRX_CTRL_2, 0);
+    rf_if_write_register(TRX_CTRL_2, RX_SAFE_MODE);
     rf_rssi_base_val = -91;
   }
 }
