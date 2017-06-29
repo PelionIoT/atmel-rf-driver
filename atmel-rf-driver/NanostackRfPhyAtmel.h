@@ -57,11 +57,11 @@ public:
     NanostackRfPhyAtmel(PinName spi_mosi, PinName spi_miso,
             PinName spi_sclk, PinName spi_cs,  PinName spi_rst, PinName spi_slp, PinName spi_irq,
             PinName i2c_sda, PinName i2c_scl);
-    ~NanostackRfPhyAtmel();
-    int8_t rf_register();
-    void rf_unregister();
-    void get_mac_address(uint8_t *mac);
-    void set_mac_address(uint8_t *mac);
+    virtual ~NanostackRfPhyAtmel();
+    virtual int8_t rf_register();
+    virtual void rf_unregister();
+    virtual void get_mac_address(uint8_t *mac);
+    virtual void set_mac_address(uint8_t *mac);
 
 private:
     AT24Mac _mac;
