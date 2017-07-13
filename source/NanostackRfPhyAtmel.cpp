@@ -1359,13 +1359,15 @@ static void rf_cca_timer_interrupt(void)
     }
     else
     {
-        /*Load the frame buffer with frame to transmit */
-        rf_if_write_frame_buffer(rf_tx_data, rf_tx_length);
         /*Make sure we're in RX state to read channel (any way we could not be?)*/
         rf_receive(trx_status);
         rf_flags_set(RFF_CCA);
         /*Start CCA process*/
         rf_if_start_cca_process();
+        /*And, now that's running...*/
+        /*Load the frame buffer with frame to transmit */
+        rf_if_write_frame_buffer(rf_tx_data, rf_tx_length);
+
     }
 }
 
