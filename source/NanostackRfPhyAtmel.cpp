@@ -527,10 +527,11 @@ static void rf_if_clear_bit(uint8_t addr, uint8_t bit)
  */
 static void rf_if_write_register(uint8_t addr, uint8_t data)
 {
-  uint8_t cmd = 0xC0;
+  char cmd[2];
+  cmd[0] = 0xC0 | addr;
+  cmd[1] = data;
   CS_SELECT();
-  rf_if_spi_exchange(cmd | addr);
-  rf_if_spi_exchange(data);
+  rf->spi.write(cmd, 2, NULL, 0);
   CS_RELEASE();
 }
 
@@ -543,13 +544,12 @@ static void rf_if_write_register(uint8_t addr, uint8_t data)
  */
 static uint8_t rf_if_read_register(uint8_t addr)
 {
-  uint8_t cmd = 0x80;
-  uint8_t data;
+  const char cmd = 0x80 | addr;
+  char data[2];
   CS_SELECT();
-  rf_if_spi_exchange(cmd | addr);
-  data = rf_if_spi_exchange(0);
+  rf->spi.write(&cmd, 1, data, 2);
   CS_RELEASE();
-  return data;
+  return data[1];
 }
 
 /*
