@@ -1130,10 +1130,11 @@ static uint8_t rf_if_spi_exchange(uint8_t out)
 
 static void rf_if_spi_exchange_n(const void *tx, size_t tx_len, void *rx, size_t rx_len)
 {
-#if 0
+#if 1
   // We assume/hope this has sufficient inter-byte spacing (t5 = 250ns).
-  rf->spi.write(tx, tx_len, rx, rx_len);
-#endif
+  rf->spi.write(static_cast<const char *>(tx), tx_len,
+                static_cast<char *>(rx), rx_len);
+#else
   while (tx_len > 0 && rx_len > 0) {
       uint8_t b;
       if (tx_len) {
