@@ -235,7 +235,6 @@ static void rf_if_irq_task_process_irq();
 #endif
 
 // HW pins to RF chip
-#define SPI_SPEED 7500000
 
 class UnlockedSPI : public SPI {
 public:
@@ -583,7 +582,18 @@ static uint8_t rf_if_read_register(uint8_t addr)
  */
 static void rf_if_reset_radio(void)
 {
-  rf->spi.frequency(SPI_SPEED);
+#if MBED_CONF_ATMEL_RF_USE_SPI_SPACING_API
+  rf->spi.frequency(MBED_CONF_ATMEL_RF_FULL_SPI_SPEED);
+  int spacing = rf->spi.write_spacing(MBED_CONF_ATMEL_RF_FULL_SPI_SPEED_BYTE_SPACING);
+  if (spacing < MBED_CONF_ATMEL_RF_FULL_SPI_SPEED_BYTE_SPACING) {
+      rf->spi.frequency(MBED_CONF_ATMEL_RF_LOW_SPI_SPEED);
+      rf->spi.write_spacing(0);
+  }
+#elif MBED_CONF_ATMEL_RF_ASSUME_SPACED_SPI
+  rf->spi.frequency(MBED_CONF_ATMEL_RF_FULL_SPI_SPEED);
+#else
+  rf->spi.frequency(MBED_CONF_ATMEL_RF_LOW_SPI_SPEED);
+#endif
   rf->IRQ.rise(0);
   rf->RST = 1;
   wait_ms(1);
@@ -1127,9 +1137,9 @@ static void rf_if_interrupt_handler(void)
  */
 static void rf_if_spi_exchange_n(const void *tx, size_t tx_len, void *rx, size_t rx_len)
 {
-#if 0
-  // We assume/hope this has sufficient inter-byte spacing (t5 = 250ns).
-  rf->spi.write(tx, tx_len, rx, rx_len);
+#if 1
+  rf->spi.write(static_cast<const char *>(tx), tx_len,
+                static_cast<char *>(rx), rx_len);
 #else
   const uint8_t *txb = static_cast<const uint8_t *>(tx);
   uint8_t *rxb = static_cast<uint8_t *>(rx);
