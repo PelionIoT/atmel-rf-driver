@@ -1352,7 +1352,7 @@ static void rf_cca_timer_interrupt(void)
 
     rf_trx_states_t trx_status = rf_if_read_trx_state();
 
-    if(trx_status == BUSY_RX_AACK)
+    if(trx_status == BUSY_RX || trx_status == BUSY_RX_AACK)
     {
         /*Reception already started - re-enable reception and say CCA fail*/
         rf_disable_static_frame_buffer_protection();
@@ -1362,8 +1362,6 @@ static void rf_cca_timer_interrupt(void)
     }
     else
     {
-        /*Load the frame buffer with frame to transmit */
-        rf_if_write_frame_buffer(rf_tx_data, rf_tx_length);
         /*Make sure we're in RX state to read channel (any way we could not be?)*/
         rf_receive(trx_status);
         rf_flags_set(RFF_CCA);
@@ -1655,7 +1653,8 @@ static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_h
     (void)data_protocol;
     rf_if_lock();
     /*Check if transmitter is busy*/
-    if(rf_if_read_trx_state() == BUSY_RX_AACK || data_length > RF_MTU - 2)
+    rf_trx_states_t trx_state = rf_if_read_trx_state();
+    if(trx_state == BUSY_RX || trx_state == BUSY_RX_AACK || data_length > RF_MTU - 2)
     {
         rf_if_unlock();
         /*Return busy*/
@@ -1709,6 +1708,9 @@ static void rf_start_tx(void)
     rf_flags_set(RFF_TX);
     /*RF state change: SLP_TR pulse triggers PLL_ON->BUSY_TX*/
     rf_if_enable_slptr();
+    /*Chip permits us to write frame buffer while it is transmitting*/
+    /*As long as first byte of data is in within 176us of TX start, we're good */
+    rf_if_write_frame_buffer(rf_tx_data, rf_tx_length);
     /*Now we're out of receive mode, can release protection*/
     rf_disable_static_frame_buffer_protection();
     rf_if_disable_slptr();
@@ -1734,7 +1736,7 @@ static void rf_receive(rf_trx_states_t trx_status)
     if(rf_flags_check(RFF_RX) == 0)
     {
         /*Wait while receiving data*/
-        while(trx_status == BUSY_RX_AACK || trx_status == STATE_TRANSITION_IN_PROGRESS)
+        while(trx_status == BUSY_RX || trx_status == BUSY_RX_AACK || trx_status == STATE_TRANSITION_IN_PROGRESS)
         {
             while_counter++;
             if(while_counter == 0xffff)
