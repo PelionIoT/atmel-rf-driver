@@ -572,7 +572,7 @@ static void rf_if_reset_radio(void)
   wait_ms(10);
   rf->RST = 1;
   wait_ms(10);
-
+  rf_if_disable_irq();
   rf->IRQ.rise(&rf_if_interrupt_handler);
 }
 
