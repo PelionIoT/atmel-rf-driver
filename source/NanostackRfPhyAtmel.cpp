@@ -701,16 +701,17 @@ static void rf_if_write_rf_settings(void)
   /*Reset RF module*/
   rf_if_reset_radio();
 
-  rf_part_num = rf_if_read_part_num();
-
   rf_if_write_register(XAH_CTRL_0,0);
   rf_if_write_register(TRX_CTRL_1, 0x20);
+
+  rf_if_write_register(IRQ_MASK, 0);
+  rf_if_read_register(IRQ_STATUS);
 
   /*CCA Mode - Carrier sense OR energy above threshold. Channel list is set separately*/
   rf_if_write_register(PHY_CC_CCA, 0x05);
 
   /*Read transceiver PART_NUM*/
-  rf_part_num = rf_if_read_register(PART_NUM);
+  rf_part_num = rf_if_read_part_num();
 
   /*Sub-GHz RF settings*/
   if(rf_part_num == PART_AT86RF212)
