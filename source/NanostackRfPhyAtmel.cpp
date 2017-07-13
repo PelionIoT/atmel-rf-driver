@@ -21,7 +21,10 @@
 #include "randLIB.h"
 #include "AT86RFReg.h"
 #include "nanostack/platform/arm_hal_phy.h"
+#include "mbed_trace.h"
 #include "mbed_toolchain.h"
+
+#define TRACE_GROUP "AtRF"
 
 /*Worst case sensitivity*/
 #define RF_DEFAULT_SENSITIVITY -88
@@ -709,6 +712,8 @@ static void rf_if_write_rf_settings(void)
   /*CCA Mode - Carrier sense OR energy above threshold. Channel list is set separately*/
   rf_if_write_register(PHY_CC_CCA, 0x05);
 
+  rf_if_write_register(IRQ_MASK, TRX_UR);
+
   /*Read transceiver PART_NUM*/
   rf_part_num = rf_if_read_register(PART_NUM);
 
@@ -1124,6 +1129,7 @@ static void rf_if_interrupt_handler(void)
 
   /*Read interrupt flag*/
   irq_status = rf_if_read_register(IRQ_STATUS);
+  uint8_t orig_flags = rf_flags;
 
   /*Disable interrupt on RF*/
   rf_if_clear_bit(IRQ_MASK, irq_status);
@@ -1155,6 +1161,10 @@ static void rf_if_interrupt_handler(void)
   if(irq_status & CCA_ED_DONE)
   {
     rf_handle_cca_ed_done();
+  }
+  if (irq_status & TRX_UR)
+  {
+    tr_error("Radio underrun s %x fl %x->%x", irq_status, orig_flags, rf_flags);
   }
 }
 
