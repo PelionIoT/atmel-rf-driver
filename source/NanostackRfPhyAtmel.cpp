@@ -66,6 +66,7 @@ typedef enum
 {
     NOP = 0x00,
     BUSY_RX = 0x01,
+    BUSY_TX = 0x02,
     RF_TX_START = 0x02,
     FORCE_TRX_OFF = 0x03,
     FORCE_PLL_ON = 0x04,
@@ -146,8 +147,8 @@ static void rf_handle_cca_ed_done(uint8_t full_trx_status);
 static void rf_handle_tx_end(rf_trx_states_t trx_status);
 static void rf_handle_rx_end(rf_trx_states_t trx_status);
 static void rf_on(void);
-static void rf_receive(rf_trx_states_t trx_status);
-static void rf_poll_trx_state_change(rf_trx_states_t trx_state);
+static void rf_receive(rf_trx_states_t trx_status = STATE_TRANSITION_IN_PROGRESS);
+static rf_trx_states_t rf_poll_trx_state_change(rf_trx_states_t trx_state);
 static void rf_init(void);
 static int8_t rf_device_register(const uint8_t *mac_addr);
 static void rf_device_unregister(void);
@@ -198,7 +199,7 @@ static uint8_t rf_if_last_acked_pending(void);
 static void rf_if_write_pan_id_registers(uint8_t *pan_id);
 static void rf_if_write_ieee_addr_registers(uint8_t *address);
 static void rf_if_write_frame_buffer(const uint8_t *ptr, uint8_t length);
-static void rf_if_change_trx_state(rf_trx_states_t trx_state);
+static rf_trx_states_t rf_if_change_trx_state(rf_trx_states_t trx_state);
 static void rf_if_start_cca_process(void);
 static int8_t rf_if_scale_rssi(uint8_t ed_level);
 static void rf_if_set_channel_register(uint8_t channel);
@@ -207,6 +208,7 @@ static void rf_if_disable_promiscuous_mode(void);
 static uint8_t rf_if_read_part_num(void);
 static void rf_if_enable_irq(void);
 static void rf_if_disable_irq(void);
+static void rf_if_spi_exchange_n(const void *tx, size_t tx_len, void *rx, size_t rx_len);
 
 static inline rf_trx_states_t rf_if_trx_status_from_full(uint8_t full_trx_status)
 {
@@ -280,8 +282,6 @@ static RFBits *rf;
 static uint8_t rf_part_num = 0;
 /*TODO: RSSI Base value setting*/
 static int8_t rf_rssi_base_val = -91;
-
-static uint8_t rf_if_spi_exchange(uint8_t out);
 
 static void rf_if_lock(void)
 {
@@ -530,7 +530,7 @@ static void rf_if_clear_bit(uint8_t addr, uint8_t bit)
  */
 static void rf_if_write_register(uint8_t addr, uint8_t data)
 {
-  const uint8_t tx[2] = { 0xC0 | addr, data };
+  const uint8_t tx[2] = { static_cast<uint8_t>(0xC0 | addr), data };
   uint8_t rx[2];
   CS_SELECT();
   rf_if_spi_exchange_n(tx, 2, rx, 2);
@@ -547,7 +547,7 @@ static void rf_if_write_register(uint8_t addr, uint8_t data)
  */
 static uint8_t rf_if_read_register_with_status(uint8_t addr, uint8_t *status_out)
 {
-  const uint8_t tx[1] = { 0x80 | addr };
+  const uint8_t tx[1] = { static_cast<uint8_t>(0x80 | addr) };
   uint8_t rx[2];
   CS_SELECT();
   rf_if_spi_exchange_n(tx, 1, rx, 2);
@@ -567,7 +567,7 @@ static uint8_t rf_if_read_register_with_status(uint8_t addr, uint8_t *status_out
  */
 static uint8_t rf_if_read_register(uint8_t addr)
 {
-  return rf_if_read_register(addr, NULL);
+  return rf_if_read_register_with_status(addr, NULL);
 }
 
 /*
@@ -920,7 +920,7 @@ static void rf_if_write_ieee_addr_registers(uint8_t *address)
  */
 static void rf_if_write_frame_buffer(const uint8_t *ptr, uint8_t length)
 {
-  const uint8_t cmd[2] = { 0x60, length + 2 };
+  const uint8_t cmd[2] = { 0x60, static_cast<uint8_t>(length + 2) };
 
   CS_SELECT();
   rf_if_spi_exchange_n(cmd, 2, NULL, 0);
@@ -967,14 +967,15 @@ static uint8_t rf_if_read_rnd(void)
  *
  * \return none
  */
-static void rf_if_change_trx_state(rf_trx_states_t trx_state)
+static rf_trx_states_t rf_if_change_trx_state(rf_trx_states_t trx_state)
 {
   // XXX Lock claim apparently not required
   rf_if_lock();
   rf_if_write_register(TRX_STATE, trx_state);
   /*Wait while not in desired state*/
-  rf_poll_trx_state_change(trx_state);
+  trx_state = rf_poll_trx_state_change(trx_state);
   rf_if_unlock();
+  return trx_state;
 }
 
 /*
@@ -1113,21 +1114,7 @@ static void rf_if_interrupt_handler(void)
 
 /*
  * \brief Function writes/read data in SPI interface
- *
- * \param out Output data
- *
- * \return Input data
  */
-static uint8_t rf_if_spi_exchange(uint8_t out)
-{
-  uint8_t v;
-  v = rf->spi.write(out);
-  // t9 = t5 = 250ns, delay between LSB of last byte to next MSB or delay between LSB & SEL rising
-  // [SPI setup assumed slow enough to not need manual delay]
-  // delay_ns(250);
-  return v;
-}
-
 static void rf_if_spi_exchange_n(const void *tx, size_t tx_len, void *rx, size_t rx_len)
 {
 #if 1
@@ -1629,20 +1616,17 @@ static rf_trx_states_t rf_poll_trx_state_change(rf_trx_states_t trx_state)
     // XXX lock apparently not needed
     rf_if_lock();
 
-    if(trx_state != RF_TX_START)
-    {
-        if(trx_state == FORCE_PLL_ON)
-            trx_state = PLL_ON;
-        else if(trx_state == FORCE_TRX_OFF)
-            trx_state = TRX_OFF;
+    if(trx_state == FORCE_PLL_ON)
+        trx_state = PLL_ON;
+    else if(trx_state == FORCE_TRX_OFF)
+        trx_state = TRX_OFF;
 
-        rf_trx_states_t state_out;
-        while((state_out = rf_if_read_trx_state()) != trx_state)
-        {
-            while_counter++;
-            if(while_counter == 0x1ff)
-                break;
-        }
+    rf_trx_states_t state_out;
+    while((state_out = rf_if_read_trx_state()) != trx_state)
+    {
+        while_counter++;
+        if(while_counter == 0x1ff)
+            break;
     }
     rf_if_unlock();
     return state_out;
@@ -1721,13 +1705,14 @@ static void rf_start_tx(void)
     }
     else
     {
-        /*RF state change: ->PLL_ON->RF_TX_START*/
+        /*RF state change: ->PLL_ON */
         rf_if_change_trx_state(FORCE_PLL_ON);
         rf_flags_clear(RFF_RX);
         /*Now we're out of receive mode, can release protection*/
         rf_disable_static_frame_buffer_protection();
         rf_flags_set(RFF_TX);
-        rf_if_change_trx_state(RF_TX_START);
+        /*RF state change: RF_TX_START command triggers PLL_ON->BUSY_TX*/
+        rf_if_write_register(TRX_STATE, RF_TX_START);
     }
 }
 
@@ -1955,7 +1940,7 @@ static void rf_shutdown(void)
  *
  * \return none
  */
-static void rf_handle_tx_end(uint8_t full_trx_status)
+static void rf_handle_tx_end(rf_trx_states_t trx_status)
 {
     rf_rx_mode = 0;
     /*If ACK is needed for this transmission*/
@@ -1967,7 +1952,7 @@ static void rf_handle_tx_end(uint8_t full_trx_status)
     }
     rf_flags_clear(RFF_RX);
     /*Start receiver*/
-    rf_receive(rf_if_trx_status_from_full(full_trx_status));
+    rf_receive(trx_status);
 
     /*Call PHY TX Done API*/
     if(device_driver.phy_tx_done_cb){
@@ -2055,7 +2040,7 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
         case PHY_INTERFACE_UP:
             rf_mode = RF_MODE_NORMAL;
             rf_channel_set(rf_channel);
-            rf_receive(STATE_TRANSITION_IN_PROGRESS);
+            rf_receive();
             rf_if_enable_irq();
             break;
         /*Enable wireless interface ED scan mode*/
