@@ -1237,6 +1237,8 @@ static int8_t rf_device_register(const uint8_t *mac_addr)
         device_driver.phy_tx_done_cb = NULL;
         /*Register device driver*/
         rf_radio_driver_id = arm_net_phy_register(&device_driver);
+    } else {
+        rf_if_disable_irq();
     }
     return rf_radio_driver_id;
 }
@@ -1539,9 +1541,6 @@ static void rf_channel_set(uint8_t ch)
  */
 static void rf_init(void)
 {
-    /*Reset RF module*/
-    rf_if_reset_radio();
-
     rf_if_lock();
 
     /*Write RF settings*/
