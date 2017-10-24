@@ -150,6 +150,7 @@ static void rf_handle_cca_ed_done(uint8_t full_trx_status);
 static void rf_handle_tx_end(rf_trx_states_t trx_status);
 static void rf_handle_rx_end(rf_trx_states_t trx_status);
 static void rf_on(void);
+static void rf_give_up_on_ack(void);
 static void rf_receive(rf_trx_states_t trx_status = STATE_TRANSITION_IN_PROGRESS);
 static rf_trx_states_t rf_poll_trx_state_change(rf_trx_states_t trx_state);
 static void rf_init(void);
@@ -1308,14 +1309,7 @@ static void rf_disable_static_frame_buffer_protection(void)
 static void rf_ack_wait_timer_interrupt(void)
 {
     rf_if_lock();
-    expected_ack_sequence = -1;
-    /*Force PLL state*/
-    rf_if_change_trx_state(FORCE_PLL_ON);
-    rf_trx_states_t trx_status = rf_poll_trx_state_change(PLL_ON);
-    /*Start receiver in RX_AACK_ON state*/
-    rf_rx_mode = 0;
-    rf_flags_clear(RFF_RX);
-    rf_receive(trx_status);
+    rf_give_up_on_ack();
     rf_if_unlock();
 }
 
@@ -1659,7 +1653,7 @@ static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_h
     }
     else
     {
-        expected_ack_sequence = -1;
+        rf_give_up_on_ack();
 
         /*Nanostack has a static TX buffer, which will remain valid until we*/
         /*generate a callback, so we just note the pointer for reading later.*/
@@ -1832,6 +1826,26 @@ static void rf_on(void)
 }
 
 /*
+ * \brief Abandon waiting for an ack frame
+
+ * \return none
+ */
+static void rf_give_up_on_ack(void)
+{
+    if (expected_ack_sequence == -1) {
+        return;
+    }
+
+    rf_if_disable_promiscuous_mode();
+    rf_if_ack_wait_timer_stop();
+    expected_ack_sequence = -1;
+
+    if(device_driver.phy_tx_done_cb){
+        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_TX_FAIL, 0, 0);
+    }
+}
+
+/*
  * \brief Function handles the received ACK frame.
  *
  * \param seq_number Sequence number of received ACK
@@ -1842,12 +1856,13 @@ static void rf_on(void)
 static void rf_handle_ack(uint8_t seq_number, uint8_t data_pending)
 {
     phy_link_tx_status_e phy_status;
-    rf_if_lock();
     /*Received ACK sequence must be equal with transmitted packet sequence*/
     if(expected_ack_sequence == seq_number)
     {
-        rf_ack_wait_timer_stop();
+        rf_if_disable_promiscuous_mode();
+        rf_if_ack_wait_timer_stop();
         expected_ack_sequence = -1;
+
         /*When data pending bit in ACK frame is set, inform NET library*/
         if(data_pending)
             phy_status = PHY_LINK_TX_DONE_PENDING;
@@ -1857,8 +1872,9 @@ static void rf_handle_ack(uint8_t seq_number, uint8_t data_pending)
         if(device_driver.phy_tx_done_cb){
             device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle,phy_status, 0, 0);
         }
+    } else {
+        rf_give_up_on_ack();
     }
-    rf_if_unlock();
 }
 
 /*
@@ -1883,10 +1899,8 @@ static void rf_handle_rx_end(rf_trx_states_t trx_status)
     /*Read received packet*/
     uint8_t len = rf_if_read_packet(rf_buffer, &rf_lqi, &rf_ed, &crc_good);
 
-    /*Make sure we leave promiscuous mode, if we were trying to catch an ack*/
-    rf_if_disable_promiscuous_mode();
-
     if (len < 5 || !crc_good) {
+        rf_give_up_on_ack();
         return;
     }
 
@@ -1906,6 +1920,7 @@ static void rf_handle_rx_end(rf_trx_states_t trx_status)
         /*Send sequence number in ACK handler*/
         rf_handle_ack(rf_buffer[2], pending);
     } else {
+        rf_give_up_on_ack();
         if( device_driver.phy_rx_cb ){
             device_driver.phy_rx_cb(rf_buffer, len - 2, rf_lqi, rf_rssi, rf_radio_driver_id);
         }
