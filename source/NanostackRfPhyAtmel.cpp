@@ -606,8 +606,10 @@ static void rf_if_reset_radio(void)
  */
 static void rf_if_enable_promiscuous_mode(void)
 {
-  /*Set AACK_PROM_MODE to enable the promiscuous mode*/
-  rf_if_write_register(XAH_CTRL_1, xah_ctrl_1 |= AACK_PROM_MODE);
+  if (!(xah_ctrl_1 & AACK_PROM_MODE)) {
+    /*Set AACK_PROM_MODE to enable the promiscuous mode*/
+    rf_if_write_register(XAH_CTRL_1, xah_ctrl_1 |= AACK_PROM_MODE);
+  }
 }
 
 /*
@@ -619,8 +621,10 @@ static void rf_if_enable_promiscuous_mode(void)
  */
 static void rf_if_disable_promiscuous_mode(void)
 {
-  /*Clear AACK_PROM_MODE to disable the promiscuous mode*/
-  rf_if_write_register(XAH_CTRL_1, xah_ctrl_1 &= ~AACK_PROM_MODE);
+  if (xah_ctrl_1 & AACK_PROM_MODE) {
+    /*Clear AACK_PROM_MODE to disable the promiscuous mode*/
+    rf_if_write_register(XAH_CTRL_1, xah_ctrl_1 &= ~AACK_PROM_MODE);
+  }
 }
 
 /*
@@ -1082,7 +1086,9 @@ static void rf_if_irq_task_process_irq(void)
 static void rf_if_interrupt_handler(void)
 #endif
 {
+  static uint8_t last_is, last_ts;
   uint8_t irq_status, full_trx_status;
+  uint8_t orig_xah_ctrl_1 = xah_ctrl_1;
 
   /*Read and clear interrupt flag, and pick up trx_status*/
   irq_status = rf_if_read_register_with_status(IRQ_STATUS, &full_trx_status);
@@ -1109,8 +1115,10 @@ static void rf_if_interrupt_handler(void)
   }
   if (irq_status & TRX_UR)
   {
-    tr_error("Radio underrun is %x ts %x fl %x->%x", irq_status, full_trx_status, orig_flags, rf_flags);
+    tr_error("Radio underrun is %x->%x ts %x->%x fl %x->%x x1 %x", last_is, irq_status, last_ts, full_trx_status, orig_flags, rf_flags, orig_xah_ctrl_1);
   }
+  last_is = irq_status;
+  last_ts = full_trx_status;
 }
 
 /*
@@ -1862,10 +1870,6 @@ static void rf_handle_ack(uint8_t seq_number, uint8_t data_pending)
  */
 static void rf_handle_rx_end(rf_trx_states_t trx_status)
 {
-    /*Start receiver*/
-    rf_flags_clear(RFF_RX);
-    rf_receive(trx_status);
-
     /*Frame received interrupt*/
     if(!rf_flags_check(RFF_RX)) {
         return;
@@ -1878,6 +1882,10 @@ static void rf_handle_rx_end(rf_trx_states_t trx_status)
 
     /*Read received packet*/
     uint8_t len = rf_if_read_packet(rf_buffer, &rf_lqi, &rf_ed, &crc_good);
+
+    /*Make sure we leave promiscuous mode, if we were trying to catch an ack*/
+    rf_if_disable_promiscuous_mode();
+
     if (len < 5 || !crc_good) {
         return;
     }
