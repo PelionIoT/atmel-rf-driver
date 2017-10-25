@@ -46,7 +46,6 @@
 #define RFF_RX 0x02
 #define RFF_TX 0x04
 #define RFF_CCA 0x08
-#define RFF_PROT 0x10
 
 typedef enum
 {
@@ -156,8 +155,6 @@ static rf_trx_states_t rf_poll_trx_state_change(rf_trx_states_t trx_state);
 static void rf_init(void);
 static int8_t rf_device_register(const uint8_t *mac_addr);
 static void rf_device_unregister(void);
-static void rf_enable_static_frame_buffer_protection(void);
-static void rf_disable_static_frame_buffer_protection(void);
 static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, data_protocol_e data_protocol );
 static void rf_cca_abort(void);
 static void rf_calibration_cb(void);
@@ -1277,37 +1274,6 @@ static void rf_device_unregister()
     }
 }
 
-/*
- * \brief Enable frame buffer protection
- *
- * If protection is enabled, reception cannot start - the radio will
- * not go into RX_BUSY or write into the frame buffer if in receive mode.
- * Setting this won't abort an already-started reception.
- * We can still write the frame buffer ourselves.
- */
-static void rf_enable_static_frame_buffer_protection(void)
-{
-  if (!rf_flags_check(RFF_PROT)) {
-    /* This also writes RX_PDT_LEVEL to 0 - maximum RX sensitivity */
-    /* Would need to modify this function if messing with that */
-    rf_if_write_register(RX_SYN, RX_PDT_DIS);
-    rf_flags_set(RFF_PROT);
-  }
-}
-
-/*
- * \brief Disable frame buffer protection
- */
-static void rf_disable_static_frame_buffer_protection(void)
-{
-  if (rf_flags_check(RFF_PROT)) {
-    /* This also writes RX_PDT_LEVEL to 0 - maximum RX sensitivity */
-    /* Would need to modify this function if messing with that */
-    rf_if_write_register(RX_SYN, 0);
-    rf_flags_clear(RFF_PROT);
-  }
-}
-
 
 /*
  * \brief Function is a call back for ACK wait timeout.
@@ -1347,27 +1313,9 @@ static void rf_calibration_timer_interrupt(void)
  */
 static void rf_cca_timer_interrupt(void)
 {
-    /*Disable reception - locks against entering BUSY_RX and overwriting frame buffer*/
-    rf_enable_static_frame_buffer_protection();
-
-    rf_trx_states_t trx_status = rf_if_read_trx_state();
-
-    if(trx_status == BUSY_RX || trx_status == BUSY_RX_AACK)
-    {
-        /*Reception already started - re-enable reception and say CCA fail*/
-        rf_disable_static_frame_buffer_protection();
-        if(device_driver.phy_tx_done_cb){
-            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
-        }
-    }
-    else
-    {
-        /*Make sure we're in RX state to read channel (any way we could not be?)*/
-        rf_receive(trx_status);
-        rf_flags_set(RFF_CCA);
-        /*Start CCA process*/
-        rf_if_start_cca_process();
-    }
+    rf_flags_set(RFF_CCA);
+    /*Start CCA process*/
+    rf_if_start_cca_process();
 }
 
 /*
@@ -1640,6 +1588,23 @@ static rf_trx_states_t rf_poll_trx_state_change(rf_trx_states_t trx_state)
 }
 
 /*
+ * \brief Function polls the RF state until it is no longer transitioning.
+ *
+ * \param trx_state RF state
+ *
+ * \return none
+ */
+static rf_trx_states_t rf_poll_for_state(void)
+{
+    rf_trx_states_t state_out;
+    while((state_out = rf_if_read_trx_state()) == STATE_TRANSITION_IN_PROGRESS)
+    {
+    }
+
+    return state_out;
+}
+
+/*
  * \brief Function starts the CCA process before starting data transmission and copies the data to RF TX FIFO.
  *
  * \param data_ptr Pointer to TX data (excluding FCS)
@@ -1690,7 +1655,6 @@ static void rf_cca_abort(void)
 {
     rf_cca_timer_stop();
     rf_flags_clear(RFF_CCA);
-    rf_disable_static_frame_buffer_protection();
 }
 
 /*
@@ -1700,20 +1664,29 @@ static void rf_cca_abort(void)
  *
  * \return none
  */
-static void rf_start_tx(void)
+static bool rf_start_tx(void)
 {
-    /*RF state change: ->PLL_ON */
-    rf_if_change_trx_state(FORCE_PLL_ON);
+    /* Attempt change to PLL_ON */
+    rf_if_write_register(TRX_STATE, PLL_ON);
+
+    rf_trx_states_t state = rf_poll_for_state();
+    if (state != PLL_ON) {
+        /* Change didn't work - must be busy */
+        tr_warn("PLL_ON fail st=%x", state);
+        return false;
+    }
+
     rf_flags_clear(RFF_RX);
     rf_flags_set(RFF_TX);
+
     /*RF state change: SLP_TR pulse triggers PLL_ON->BUSY_TX*/
     rf_if_enable_slptr();
     /*Chip permits us to write frame buffer while it is transmitting*/
     /*As long as first byte of data is in within 176us of TX start, we're good */
     rf_if_write_frame_buffer(rf_tx_data, rf_tx_length);
-    /*Now we're out of receive mode, can release protection*/
-    rf_disable_static_frame_buffer_protection();
     rf_if_disable_slptr();
+
+    return true;
 }
 
 /*
@@ -1971,7 +1944,7 @@ static void rf_handle_tx_end(rf_trx_states_t trx_status)
         rf_ack_wait_timer_start(rf_ack_wait_duration);
         rf_rx_mode = 1;
     }
-    rf_flags_clear(RFF_RX);
+    rf_flags_clear(RFF_TX);
     /*Start receiver*/
     rf_receive(trx_status);
 
@@ -1995,15 +1968,16 @@ static void rf_handle_cca_ed_done(uint8_t full_trx_status)
     }
     rf_flags_clear(RFF_CCA);
 
+    bool success = false;
+
     /*Check the result of CCA process*/
     if((full_trx_status & CCA_STATUS) && rf_if_trx_status_from_full(full_trx_status) == RX_AACK_ON)
     {
-        rf_start_tx();
+        success = rf_start_tx();
     }
-    else
+
+    if (!success)
     {
-        /*Re-enable reception*/
-        rf_disable_static_frame_buffer_protection();
         /*Send CCA fail notification*/
         if(device_driver.phy_tx_done_cb){
             device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
