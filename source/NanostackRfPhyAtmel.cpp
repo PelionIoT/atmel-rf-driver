@@ -1746,8 +1746,6 @@ static void rf_receive(rf_trx_states_t trx_status)
             trx_status = rf_if_read_trx_state();
         }
 
-        rf_if_change_trx_state(PLL_ON);
-
         if((rf_mode == RF_MODE_SNIFFER) || (rf_mode == RF_MODE_ED))
         {
             if (trx_status != RX_ON) {
