@@ -1750,7 +1750,9 @@ static void rf_receive(rf_trx_states_t trx_status)
 
         if((rf_mode == RF_MODE_SNIFFER) || (rf_mode == RF_MODE_ED))
         {
-            rf_if_change_trx_state(RX_ON);
+            if (trx_status != RX_ON) {
+                trx_status = rf_if_change_trx_state(RX_ON);
+            }
         }
         else
         {
@@ -1764,7 +1766,9 @@ static void rf_receive(rf_trx_states_t trx_status)
             {
                 rf_if_disable_promiscuous_mode();
             }
-            rf_if_change_trx_state(RX_AACK_ON);
+            if (trx_status != RX_AACK_ON) {
+                trx_status = rf_if_change_trx_state(RX_AACK_ON);
+            }
         }
         /*If calibration timer was unable to calibrate the RF, run calibration now*/
         if(!rf_tuned)
