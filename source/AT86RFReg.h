@@ -114,8 +114,12 @@ extern "C" {
 
 /*PHY_CC_CCA bits*/
 #define CCA_REQUEST                 0x80
+#define CCA_MODE_3A                 0x00
 #define CCA_MODE_1                  0x20
-#define CCA_MODE_3                  0x60
+#define CCA_MODE_2                  0x40
+#define CCA_MODE_3B                 0x60
+#define CCA_MODE_MASK               0x60
+#define CCA_CHANNEL_MASK            0x1F
 
 /*IRQ_MASK bits*/
 #define RX_START                    0x04
@@ -131,6 +135,10 @@ extern "C" {
 
 /*TRX_CTRL_1 bits*/
 #define PA_EXT_EN                   0x80
+#define TX_AUTO_CRC_ON              0x20
+#define SPI_CMD_MODE_TRX_STATUS     0x04
+#define SPI_CMD_MODE_PHY_RSSI       0x08
+#define SPI_CMD_MODE_IRQ_STATUS     0x0C
 
 /*TRX_CTRL_2 bits*/
 #define RX_SAFE_MODE                0x80
