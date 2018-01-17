@@ -1667,16 +1667,16 @@ static void rf_cca_abort(void)
 static bool rf_start_tx()
 {
     /* Attempt change to PLL_ON */
-	rf_if_write_register(TRX_STATE, PLL_ON);
+    rf_if_write_register(TRX_STATE, PLL_ON);
 
-	// It appears that if radio is busy, rather than ignoring the state change,
-	// the state change happens when it stops being busy - eg
-	// after address match fail or finishing reception. If this happens, we do
-	// not want to transmit - our channel clear check is stale (either someone is
-	// still transmitting, or it's a long time since we checked). So wait for the
-	// PLL_ON change and then go to receive mode without trying to transmit.
+    // It appears that if radio is busy, rather than ignoring the state change,
+    // the state change happens when it stops being busy - eg
+    // after address match fail or finishing reception. If this happens, we do
+    // not want to transmit - our channel clear check is stale (either someone is
+    // still transmitting, or it's a long time since we checked). So wait for the
+    // PLL_ON change and then go to receive mode without trying to transmit.
     rf_trx_states_t state = rf_poll_for_state();
-    int poll_count=0;
+    int poll_count = 0;
     while (state != PLL_ON) {
         /* Change didn't work (yet) - must be busy - assume it will eventually change */
         state = rf_poll_for_state();
