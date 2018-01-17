@@ -145,7 +145,7 @@ static int8_t rf_tx_power_set(uint8_t power);
 static rf_trx_part_e rf_radio_type_read(void);
 static void rf_ack_wait_timer_start(uint16_t slots);
 static void rf_ack_wait_timer_stop(void);
-static void rf_handle_cca_ed_done(uint8_t irq_status, uint8_t full_trx_status);
+static void rf_handle_cca_ed_done(uint8_t full_trx_status);
 static void rf_handle_tx_end(rf_trx_states_t trx_status);
 static void rf_handle_rx_end(rf_trx_states_t trx_status);
 static void rf_on(void);
@@ -1119,7 +1119,7 @@ static void rf_if_interrupt_handler(void)
   }
   if(irq_status & CCA_ED_DONE)
   {
-    rf_handle_cca_ed_done(irq_status, full_trx_status);
+    rf_handle_cca_ed_done(full_trx_status);
   }
   if (irq_status & TRX_UR)
   {
@@ -1664,7 +1664,7 @@ static void rf_cca_abort(void)
  *
  * \return none
  */
-static bool rf_start_tx(uint8_t irq_status, uint8_t full_trx_status)
+static bool rf_start_tx()
 {
     /* Attempt change to PLL_ON */
 	rf_if_write_register(TRX_STATE, PLL_ON);
@@ -1673,8 +1673,8 @@ static bool rf_start_tx(uint8_t irq_status, uint8_t full_trx_status)
 	// the state change happens when it stops being busy - eg
 	// after address match fail or finishing reception. If this happens, we do
 	// not want to transmit - our channel clear check is stale (either someone is
-	// still transmitting, or it's a long time since we checked). So undo the
-	// mode change and exit.
+	// still transmitting, or it's a long time since we checked). So wait for the
+	// PLL_ON change and then go to receive mode without trying to transmit.
     rf_trx_states_t state = rf_poll_for_state();
     int poll_count=0;
     while (state != PLL_ON) {
@@ -1684,10 +1684,10 @@ static bool rf_start_tx(uint8_t irq_status, uint8_t full_trx_status)
     }
 
     rf_flags_clear(RFF_RX);
-    // Check whether we saw any delay in the PLL_ON transition, suggesting business
+    // Check whether we saw any delay in the PLL_ON transition.
     if (poll_count > 0) {
-    	// Usually happens -> trx_status=0xd6 -> rx_aack_on and cca done, irq_stataus=10 -> cca_ed_done
-        tr_warning("count>1 %d irq %x init status %x pll_on", poll_count, irq_status, full_trx_status);
+        tr_warning("PLL_ON delayed, retry count: %d", poll_count);
+        // let's get back to the receiving state.
         rf_receive(state);
         return false;
     }
@@ -1721,7 +1721,7 @@ static void rf_receive(rf_trx_states_t trx_status)
     /*If not yet in RX state set it*/
     if(rf_flags_check(RFF_RX) == 0)
     {
-        /*Wait while receiving data. Just making sure. This shouln't actually happen. */
+        /*Wait while receiving data. Just making sure, usually this shouldn't happen. */
         while(trx_status == BUSY_RX || trx_status == BUSY_RX_AACK || trx_status == STATE_TRANSITION_IN_PROGRESS)
         {
             while_counter++;
@@ -1974,7 +1974,7 @@ static void rf_handle_tx_end(rf_trx_states_t trx_status)
  *
  * \return none
  */
-static void rf_handle_cca_ed_done(uint8_t irq_status, uint8_t full_trx_status)
+static void rf_handle_cca_ed_done(uint8_t full_trx_status)
 {
     if (!rf_flags_check(RFF_CCA)) {
         return;
@@ -1986,7 +1986,7 @@ static void rf_handle_cca_ed_done(uint8_t irq_status, uint8_t full_trx_status)
     /*Check the result of CCA process*/
     if((full_trx_status & CCA_STATUS) && rf_if_trx_status_from_full(full_trx_status) == RX_AACK_ON)
     {
-        success = rf_start_tx(irq_status, full_trx_status);
+        success = rf_start_tx();
     }
 
     if (!success)
