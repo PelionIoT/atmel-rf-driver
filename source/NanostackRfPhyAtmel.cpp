@@ -1664,28 +1664,41 @@ static void rf_cca_abort(void)
  *
  * \return none
  */
-static bool rf_start_tx(void)
+static bool rf_start_tx()
 {
     /* Attempt change to PLL_ON */
     rf_if_write_register(TRX_STATE, PLL_ON);
 
+    // It appears that if radio is busy, rather than ignoring the state change,
+    // the state change happens when it stops being busy - eg
+    // after address match fail or finishing reception. If this happens, we do
+    // not want to transmit - our channel clear check is stale (either someone is
+    // still transmitting, or it's a long time since we checked). So wait for the
+    // PLL_ON change and then go to receive mode without trying to transmit.
     rf_trx_states_t state = rf_poll_for_state();
-    if (state != PLL_ON) {
-        /* Change didn't work - must be busy */
-        tr_warn("PLL_ON fail st=%x", state);
-        return false;
+    int poll_count = 0;
+    while (state != PLL_ON) {
+        /* Change didn't work (yet) - must be busy - assume it will eventually change */
+        state = rf_poll_for_state();
+        poll_count++;
     }
 
     rf_flags_clear(RFF_RX);
-    rf_flags_set(RFF_TX);
+    // Check whether we saw any delay in the PLL_ON transition.
+    if (poll_count > 0) {
+        tr_warning("PLL_ON delayed, retry count: %d", poll_count);
+        // let's get back to the receiving state.
+        rf_receive(state);
+        return false;
+    }
 
+    rf_flags_set(RFF_TX);
     /*RF state change: SLP_TR pulse triggers PLL_ON->BUSY_TX*/
     rf_if_enable_slptr();
     /*Chip permits us to write frame buffer while it is transmitting*/
     /*As long as first byte of data is in within 176us of TX start, we're good */
     rf_if_write_frame_buffer(rf_tx_data, rf_tx_length);
     rf_if_disable_slptr();
-
     return true;
 }
 
@@ -1708,7 +1721,7 @@ static void rf_receive(rf_trx_states_t trx_status)
     /*If not yet in RX state set it*/
     if(rf_flags_check(RFF_RX) == 0)
     {
-        /*Wait while receiving data*/
+        /*Wait while receiving data. Just making sure, usually this shouldn't happen. */
         while(trx_status == BUSY_RX || trx_status == BUSY_RX_AACK || trx_status == STATE_TRANSITION_IN_PROGRESS)
         {
             while_counter++;
