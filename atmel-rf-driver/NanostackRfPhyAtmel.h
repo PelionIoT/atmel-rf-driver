@@ -17,9 +17,12 @@
 #ifndef NANOSTACK_RF_PHY_ATMEL_H_
 #define NANOSTACK_RF_PHY_ATMEL_H_
 
-#include "NanostackRfPhy.h"
 #include "at24mac.h"
 #include "PinNames.h"
+
+#ifdef MBED_CONF_NANOSTACK_CONFIGURATION
+
+#include "NanostackRfPhy.h"
 
 // Arduino pin defaults for convenience
 #if !defined(ATMEL_SPI_MOSI)
@@ -78,4 +81,5 @@ private:
     const PinName _spi_irq;
 };
 
+#endif /* MBED_CONF_NANOSTACK_CONFIGURATION */
 #endif /* NANOSTACK_RF_PHY_ATMEL_H_ */

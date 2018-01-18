@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 #include <string.h>
+
+#ifdef MBED_CONF_NANOSTACK_CONFIGURATION
+
 #include "platform/arm_hal_interrupt.h"
 #include "nanostack/platform/arm_hal_phy.h"
 #include "ns_types.h"
@@ -2436,3 +2439,4 @@ void NanostackRfPhyAtmel::set_mac_address(uint8_t *mac)
     rf_if_unlock();
 }
 
+#endif // MBED_CONF_NANOSTACK_CONFIGURATION
