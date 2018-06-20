@@ -144,10 +144,8 @@ static const phy_device_channel_page_s phy_channel_pages[] = {
  * \return 0, Supported Value
  * \return -1, Not Supported Value
  */
-static int8_t rf_tx_power_set(uint8_t power);
 static rf_trx_part_e rf_radio_type_read(void);
 static void rf_ack_wait_timer_start(uint16_t slots);
-static void rf_ack_wait_timer_stop(void);
 static void rf_handle_cca_ed_done(uint8_t full_trx_status);
 static void rf_handle_tx_end(rf_trx_states_t trx_status);
 static void rf_handle_rx_end(rf_trx_states_t trx_status);
@@ -374,27 +372,6 @@ static void delay_ns(uint32_t ns)
 #define CS_SELECT()  {rf->CS = 0; /* delay_ns(180); */}
  // t9 = 250ns, last clock to SEL rising edge, t8 = 250ns, SPI idle time between consecutive access
 #define CS_RELEASE() {delay_ns(250); rf->CS = 1; delay_ns(250);}
-
-/*
- * \brief Function sets the TX power variable.
- *
- * \param power TX power setting
- *
- * \return 0 Success
- * \return -1 Fail
- */
-MBED_UNUSED static int8_t rf_tx_power_set(uint8_t power)
-{
-    int8_t ret_val = -1;
-
-    radio_tx_power = power;
-    rf_if_lock();
-    rf_if_write_set_tx_power_register(radio_tx_power);
-    rf_if_unlock();
-    ret_val = 0;
-
-    return ret_val;
-}
 
 /*
  * \brief Read connected radio part.
@@ -1368,18 +1345,6 @@ static void rf_cca_timer_stop(void)
 }
 
 /*
- * \brief Function stops the ACK wait timeout.
- *
- * \param none
- *
- * \return none
- */
-static void rf_ack_wait_timer_stop(void)
-{
-    rf_if_ack_wait_timer_stop();
-}
-
-/*
  * \brief Function writes various RF settings in startup.
  *
  * \param none
@@ -1999,32 +1964,6 @@ static void rf_handle_cca_ed_done(uint8_t full_trx_status)
             device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
         }
     }
-}
-
-/*
- * \brief Function returns the TX power variable.
- *
- * \param none
- *
- * \return radio_tx_power TX power variable
- */
-MBED_UNUSED static uint8_t rf_tx_power_get(void)
-{
-  return radio_tx_power;
-}
-
-/*
- * \brief Function enables the usage of Antenna diversity.
- *
- * \param none
- *
- * \return 0 Success
- */
-MBED_UNUSED static int8_t rf_enable_antenna_diversity(void)
-{
-    int8_t ret_val = 0;
-    rf_use_antenna_diversity = 1;
-    return ret_val;
 }
 
 /*
