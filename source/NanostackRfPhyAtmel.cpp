@@ -270,7 +270,7 @@ RFBits::RFBits(PinName spi_mosi, PinName spi_miso,
         SLP_TR(spi_slp),
         IRQ(spi_irq)
 #ifdef MBED_CONF_RTOS_PRESENT
-    , irq_thread(osPriorityRealtime, 1024)
+    , irq_thread(osPriorityRealtime, MBED_CONF_ATMEL_RF_IRQ_THREAD_STACK_SIZE, NULL, "atmel_irq_thread")
 #endif
 {
 #ifdef MBED_CONF_RTOS_PRESENT
