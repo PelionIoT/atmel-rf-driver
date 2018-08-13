@@ -20,6 +20,10 @@
         "assume-spaced-spi":  {
             "help": "If not using SPI spacing API, assume platform has widely-spaced bytes in bursts, so use full clock speed rather than low.",
             "value": false
+        },
+        "provide-default": {
+            "help": "Provide default NanostackRfpy. [true/false]",
+            "value": false
         }
     },
     "target_overrides": {
