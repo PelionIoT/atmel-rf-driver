@@ -1087,6 +1087,15 @@ static void rf_if_interrupt_handler(void)
   {
     /*TX done interrupt*/
     rf_trx_states_t trx_status = rf_if_trx_status_from_full(full_trx_status);
+    
+    // If the RFF_TX flag is set and we hit TRX_END, the radio state should be PLL_ON.
+    // Wait for it to transition from BUSY_TX -> PLL_ON.
+    // Otherwise we might miss handling the tx end (checked later with PLL_ON).
+    while ((rf_flags & RFF_TX ) && (trx_status != PLL_ON))
+    {
+        trx_status = rf_poll_for_state();
+    }
+
     if(trx_status == PLL_ON || trx_status == TX_ARET_ON)
     {
       rf_handle_tx_end(trx_status);
