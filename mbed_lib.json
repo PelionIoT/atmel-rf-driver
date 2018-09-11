@@ -24,6 +24,10 @@
         "irq-thread-stack-size":  {
             "help": "The stack size of the Thread serving the Atmel RF interrupts",
             "value": 1024
+        },
+        "provide-default": {
+            "help": "Provide default NanostackRfpy. [true/false]",
+            "value": false
         }
     },
     "target_overrides": {

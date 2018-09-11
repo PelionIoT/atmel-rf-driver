@@ -1103,7 +1103,8 @@ static void rf_if_interrupt_handler(void)
   }
   if (irq_status & TRX_UR)
   {
-    tr_error("Radio underrun is %x->%x ts %x->%x fl %x->%x x1 %x", last_is, irq_status, last_ts, full_trx_status, orig_flags, rf_flags, orig_xah_ctrl_1);
+    // Here some counter could be used to monitor the underrun occurancy count.
+    // Do not print anything here!
   }
   last_is = irq_status;
   last_ts = full_trx_status;
@@ -2390,5 +2391,16 @@ void NanostackRfPhyAtmel::set_mac_address(uint8_t *mac)
 
     rf_if_unlock();
 }
+
+#if MBED_CONF_ATMEL_RF_PROVIDE_DEFAULT
+
+NanostackRfPhy &NanostackRfPhy::get_default_instance()
+{
+  static NanostackRfPhyAtmel rf_phy(ATMEL_SPI_MOSI, ATMEL_SPI_MISO, ATMEL_SPI_SCLK, ATMEL_SPI_CS,
+                           ATMEL_SPI_RST, ATMEL_SPI_SLP, ATMEL_SPI_IRQ, ATMEL_I2C_SDA, ATMEL_I2C_SCL);
+  return rf_phy;
+}
+
+#endif // MBED_CONF_ATMEL_RF_PROVIDE_DEFAULT
 
 #endif // MBED_CONF_NANOSTACK_CONFIGURATION
