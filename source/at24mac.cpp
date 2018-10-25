@@ -15,6 +15,8 @@
  */
 #include "at24mac.h"
 
+#if DEVICE_I2C
+
 /* Device addressing */
 #define AT24MAC_EEPROM_ADDRESS		(0x0A<<4)
 #define AT24MAC_RW_PROTECT_ADDRESS	(0x06<<4)
@@ -29,30 +31,9 @@
 #define EUI64_LEN 8
 #define EUI48_LEN 6
 
-AT24Mac::I2CReset::I2CReset(PinName sda, PinName scl)
-{
-    mbed::DigitalInOut SDA(sda, PIN_OUTPUT, PullUp, 1);
-    mbed::DigitalInOut SCL(scl, PIN_OUTPUT, PullUp, 0);
-    //generate 9 clocks for worst-case scenario
-    for (int i = 0; i < 10; ++i) {
-        SCL = 1;
-        wait_us(5);
-        SCL = 0;
-        wait_us(5);
-    }
-    //generate a STOP condition
-    SDA = 0;
-    wait_us(5);
-    SCL = 1;
-    wait_us(5);
-    SDA = 1;
-    wait_us(5);
-}
+using namespace mbed;
 
-/*I2C needs to be reset before constructing the I2C object (in case I2C is stuck)
-  because they use the same pins, therefore i2c_reset has to be before _i2c
-  in the initializer list*/
-AT24Mac::AT24Mac(PinName sda, PinName scl) : i2c_reset(sda, scl), _i2c(sda, scl)
+AT24Mac::AT24Mac(PinName sda, PinName scl) : _i2c(sda , scl)
 {
     // Do nothing
 }
@@ -80,3 +61,5 @@ int AT24Mac::read_eui48(void *buf)
         return -1; //No ACK
     return _i2c.read(AT24MAC_SERIAL_ADDRESS, (char*)buf, EUI48_LEN);
 }
+
+#endif /* DEVICE_I2C */
