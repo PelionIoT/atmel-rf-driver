@@ -1087,32 +1087,25 @@ static void rf_if_interrupt_handler(void)
   {
     /*TX done interrupt*/
     rf_trx_states_t trx_status = rf_if_trx_status_from_full(full_trx_status);
-    
-    // If the RFF_TX flag is set and we hit TRX_END, the radio state should be PLL_ON.
-    // Wait for it to transition from BUSY_TX -> PLL_ON.
-    // Otherwise we might miss handling the tx end (checked later with PLL_ON).
-    while ((rf_flags & RFF_TX ) && (trx_status != PLL_ON))
-    {
-        trx_status = rf_poll_for_state();
-    }
 
-    if(trx_status == PLL_ON || trx_status == TX_ARET_ON)
-    {
-      rf_handle_tx_end(trx_status);
+    if (rf_flags & RFF_TX) {
+        rf_handle_tx_end(trx_status);
     }
-    /*Frame received interrupt*/
-    else
-    {
-      rf_handle_rx_end(trx_status);
+    else if (rf_flags & RFF_RX) {
+        rf_handle_rx_end(trx_status);
+    }
+    else {
+    //something went really wrong
     }
   }
+
   if(irq_status & CCA_ED_DONE)
   {
     rf_handle_cca_ed_done(full_trx_status);
   }
   if (irq_status & TRX_UR)
   {
-    // Here some counter could be used to monitor the underrun occurancy count.
+    // Here some counter could be used to monitor the under run occurrence count.
     // Do not print anything here!
   }
   last_is = irq_status;
