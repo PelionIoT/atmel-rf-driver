@@ -1077,24 +1077,22 @@ static void rf_if_interrupt_handler(void)
     irq_status = rf_if_read_register_with_status(IRQ_STATUS, &full_trx_status);
 
     /*Frame end interrupt (RX and TX)*/
-    if(irq_status & TRX_END) {
+    if (irq_status & TRX_END) {
         rf_trx_states_t trx_status = rf_if_trx_status_from_full(full_trx_status);
         if (rf_flags & RFF_TX) {
             rf_handle_tx_end(trx_status);
-        }
-        else if (rf_flags & RFF_RX) {
+        } else if (rf_flags & RFF_RX) {
             rf_handle_rx_end(trx_status);
-        }
-        else {
-        //something went really wrong
+        } else {
+            //something went really wrong
         }
     }
     if (irq_status & CCA_ED_DONE) {
         rf_handle_cca_ed_done(full_trx_status);
     }
     if (irq_status & TRX_UR) {
-    // Here some counter could be used to monitor the under run occurrence count.
-    // Do not print anything here!
+        // Here some counter could be used to monitor the under run occurrence count.
+        // Do not print anything here!
     }
 }
 
