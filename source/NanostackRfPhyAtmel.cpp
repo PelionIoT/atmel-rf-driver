@@ -102,8 +102,8 @@ static uint8_t mac_tx_handle = 0;
 static uint8_t xah_ctrl_1;
 
 /* Channel configurations for 2.4 and sub-GHz */
-static const phy_rf_channel_configuration_s phy_24ghz = {2405000000U, 5000000U, 250000U, 16U, M_OQPSK};
-static const phy_rf_channel_configuration_s phy_subghz = {868300000U, 2000000U, 250000U, 11U, M_OQPSK};
+static const phy_rf_channel_configuration_s phy_24ghz = {.channel_0_center_frequency = 2405000000U, .channel_spacing = 5000000U, .datarate = 250000U, .number_of_channels = 16U, .modulation = M_OQPSK};
+static const phy_rf_channel_configuration_s phy_subghz = {.channel_0_center_frequency = 868300000U, .channel_spacing = 2000000U, .datarate = 250000U, .number_of_channels = 11U, .modulation = M_OQPSK};
 
 static const phy_device_channel_page_s phy_channel_pages[] = {
     { CHANNEL_PAGE_0, &phy_24ghz},
