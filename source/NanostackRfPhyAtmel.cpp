@@ -26,13 +26,13 @@
 #include "nanostack/platform/arm_hal_phy.h"
 #include "mbed_trace.h"
 #include "mbed_toolchain.h"
-#include "mbed_thread.h"
 #include "DigitalIn.h"
 #include "DigitalOut.h"
 #include "InterruptIn.h"
 #include "SPI.h"
 #include "inttypes.h"
 #include "Timeout.h"
+#include "platform/mbed_error.h"
 
 #define TRACE_GROUP "AtRF"
 
@@ -526,14 +526,14 @@ static void rf_if_reset_radio(void)
 #endif
     rf->IRQ.rise(0);
     rf->RST = 1;
-    thread_sleep_for(1);
+    ThisThread::sleep_for(2);
     rf->RST = 0;
-    thread_sleep_for(10);
+    ThisThread::sleep_for(10);
     CS_RELEASE();
     rf->SLP_TR = 0;
-    thread_sleep_for(10);
+    ThisThread::sleep_for(10);
     rf->RST = 1;
-    thread_sleep_for(10);
+    ThisThread::sleep_for(10);
 
     rf->IRQ.rise(&rf_if_interrupt_handler);
 }
@@ -884,15 +884,16 @@ static uint8_t rf_if_read_rnd(void)
         rf_if_write_register(TRX_RPC, RX_RPC_CTRL | TRX_RPC_RSVD_1);
     }
 
-    thread_sleep_for(1);
+
+    wait_ns(1000);
     temp = ((rf_if_read_register(PHY_RSSI) >> 5) << 6);
-    thread_sleep_for(1);
+    wait_ns(1000);
     temp |= ((rf_if_read_register(PHY_RSSI) >> 5) << 4);
-    thread_sleep_for(1);
+    wait_ns(1000);
     temp |= ((rf_if_read_register(PHY_RSSI) >> 5) << 2);
-    thread_sleep_for(1);
+    wait_ns(1000);
     temp |= ((rf_if_read_register(PHY_RSSI) >> 5));
-    thread_sleep_for(1);
+    wait_ns(1000);
     if (rf_part_num == PART_AT86RF233) {
         rf_if_write_register(TRX_RPC, tmp_rpc_val);
     }
