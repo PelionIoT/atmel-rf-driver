@@ -19,10 +19,14 @@
 
 #include "at24mac.h"
 #include "PinNames.h"
+#include "NanostackRfPhyAT86RF215.h"
 
 #if defined(MBED_CONF_NANOSTACK_CONFIGURATION) && DEVICE_SPI && DEVICE_I2C && defined(MBED_CONF_RTOS_PRESENT)
 
 #include "NanostackRfPhy.h"
+
+// Uncomment to use testing gpios attached to TX/RX processes
+ #define TEST_GPIOS_ENABLED
 
 // Arduino pin defaults for convenience
 #if !defined(ATMEL_SPI_MOSI)
@@ -52,6 +56,21 @@
 #if !defined(ATMEL_I2C_SCL)
 #define ATMEL_I2C_SCL    D15
 #endif
+#if !defined(ATMEL_SPI_TEST1)
+#define ATMEL_SPI_TEST1    D6
+#endif
+#if !defined(ATMEL_SPI_TEST2)
+#define ATMEL_SPI_TEST2    D3
+#endif
+#if !defined(ATMEL_SPI_TEST3)
+#define ATMEL_SPI_TEST3    D4
+#endif
+#if !defined(ATMEL_SPI_TEST4)
+#define ATMEL_SPI_TEST4    D2
+#endif
+#if !defined(ATMEL_SPI_TEST5)
+#define ATMEL_SPI_TEST5    D8
+#endif
 
 class RFBits;
 
@@ -59,7 +78,11 @@ class NanostackRfPhyAtmel : public NanostackRfPhy {
 public:
     NanostackRfPhyAtmel(PinName spi_mosi, PinName spi_miso,
                         PinName spi_sclk, PinName spi_cs,  PinName spi_rst, PinName spi_slp, PinName spi_irq,
-                        PinName i2c_sda, PinName i2c_scl);
+                        PinName i2c_sda, PinName i2c_scl
+#ifdef TEST_GPIOS_ENABLED
+                       ,PinName spi_test1, PinName spi_test2, PinName spi_test3, PinName spi_test4, PinName spi_test5
+#endif //TEST_GPIOS_ENABLED
+                       );
     virtual ~NanostackRfPhyAtmel();
     virtual int8_t rf_register();
     virtual void rf_unregister();
@@ -79,7 +102,41 @@ private:
     const PinName _spi_rst;
     const PinName _spi_slp;
     const PinName _spi_irq;
+#ifdef TEST_GPIOS_ENABLED
+    const PinName _spi_test1;
+    const PinName _spi_test2;
+    const PinName _spi_test3;
+    const PinName _spi_test4;
+    const PinName _spi_test5;
+#endif //TEST_GPIOS_ENABLED
 };
+
+#ifdef TEST_GPIOS_ENABLED
+#define TEST_TX_STARTED     rf->TEST1 = 1;
+#define TEST_TX_DONE        rf->TEST1 = 0;
+#define TEST_RX_STARTED     rf->TEST2 = 1;
+#define TEST_RX_DONE        rf->TEST2 = 0;
+#define TEST_ACK_TX_STARTED rf->TEST3 = 1;
+#define TEST_ACK_TX_DONE    rf->TEST3 = 0;
+#define TEST1_ON            rf->TEST4 = 1;
+#define TEST1_OFF           rf->TEST4 = 0;
+#define TEST2_ON            rf->TEST5 = 1;
+#define TEST2_OFF           rf->TEST5 = 0;
+extern void (*fhss_uc_switch)(void);
+extern void (*fhss_bc_switch)(void);
+#else //TEST_GPIOS_ENABLED
+#define TEST_TX_STARTED
+#define TEST_TX_DONE
+#define TEST_RX_STARTED
+#define TEST_RX_DONE
+#define TEST_ACK_TX_STARTED
+#define TEST_ACK_TX_DONE
+#define TEST1_ON
+#define TEST1_OFF
+#define TEST2_ON
+#define TEST2_OFF
+#endif //TEST_GPIOS_ENABLED
+
 
 #endif /* MBED_CONF_NANOSTACK_CONFIGURATION */
 #endif /* NANOSTACK_RF_PHY_ATMEL_H_ */

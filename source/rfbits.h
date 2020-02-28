@@ -21,6 +21,7 @@
 #include "DigitalOut.h"
 #include "InterruptIn.h"
 #include "SPI.h"
+#include <Timer.h>
 #include "Timeout.h"
 #include "rtos.h"
 
@@ -39,15 +40,27 @@ class RFBits {
 public:
     RFBits(PinName spi_mosi, PinName spi_miso,
            PinName spi_sclk, PinName spi_cs,
-           PinName spi_rst, PinName spi_slp, PinName spi_irq);
+           PinName spi_rst, PinName spi_slp, PinName spi_irq
+#ifdef TEST_GPIOS_ENABLED
+           , PinName spi_test1, PinName spi_test2, PinName spi_test3, PinName spi_test4, PinName spi_test5
+#endif //TEST_GPIOS_ENABLED
+           );
     UnlockedSPI spi;
     DigitalOut CS;
     DigitalOut RST;
     DigitalOut SLP_TR;
     InterruptIn IRQ;
+#ifdef TEST_GPIOS_ENABLED
+    DigitalOut TEST1;
+    DigitalOut TEST2;
+    DigitalOut TEST3;
+    DigitalOut TEST4;
+    DigitalOut TEST5;
+#endif //TEST_GPIOS_ENABLED
     Timeout ack_timer;
     Timeout cal_timer;
     Timeout cca_timer;
+    Timer tx_timer;
     int init_215_driver(RFBits *_rf, const uint8_t mac[8], uint8_t *rf_part_num);
 #ifdef MBED_CONF_RTOS_PRESENT
     Thread irq_thread;
