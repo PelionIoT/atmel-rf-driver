@@ -59,7 +59,7 @@ typedef enum {
     RF_CSMA_STARTED,
     RF_TX_STARTED,
     RF_RX_STARTED,
-    RF_TX_ACK
+    RF_RX_STARTED_WHILE_CSMA
 } rf_states_e;
 
 } // anonymous namespace
@@ -115,9 +115,19 @@ static uint8_t rf24_irq_mask = 0;
 static uint8_t bbc0_irq_mask = 0;
 static uint8_t bbc1_irq_mask = 0;
 
+static int8_t cca_threshold = -80;
+
 /* Channel configurations for 2.4 and sub-GHz */
-static const phy_rf_channel_configuration_s phy_24ghz = {.channel_0_center_frequency = 2405000000U, .channel_spacing = 5000000U, .datarate = 250000U, .number_of_channels = 16U, .modulation = M_OQPSK};
-static const phy_rf_channel_configuration_s phy_subghz = {.channel_0_center_frequency = 868300000U, .channel_spacing = 2000000U, .datarate = 250000U, .number_of_channels = 11U, .modulation = M_OQPSK};
+static const phy_rf_channel_configuration_s phy_24ghz = {.channel_0_center_frequency = 2405000000U,
+                                                         .channel_spacing = 5000000U,
+                                                         .datarate = 250000U,
+                                                         .number_of_channels = 16U,
+                                                         .modulation = M_OQPSK};
+static const phy_rf_channel_configuration_s phy_subghz = {.channel_0_center_frequency = 868300000U,
+                                                          .channel_spacing = 2000000U,
+                                                          .datarate = 250000U,
+                                                          .number_of_channels = 11U,
+                                                          .modulation = M_OQPSK};
 
 static const phy_device_channel_page_s phy_channel_pages[] = {
     { CHANNEL_PAGE_0, &phy_24ghz},
@@ -415,25 +425,24 @@ static int8_t rf_start_csma_ca(uint8_t *data_ptr, uint16_t data_length, uint8_t 
 
 static void rf_handle_cca_ed_done(void)
 {
-    TEST_ACK_TX_DONE
-    if (rf_state != RF_RX_STARTED) {
-        rf_backup_timer_stop();
-    }
     rf_irq_rf_disable(EDC, RF_09);
     rf_irq_rf_disable(EDC, rf_module);
-    if (rf_state == RF_RX_STARTED || ((int8_t) rf_read_rf_register(RF_EDV, rf_module) > -95)) {
-        if (rf_state == RF_CSMA_STARTED) {
-            TEST2_ON
-            rf_state = RF_IDLE;
-        }
-        if (device_driver.phy_tx_done_cb) {
-            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
-        }
-        TEST2_OFF
-    } else {
-        rf_irq_bbc_disable(RXFE, rf_module);
-        rf_start_tx();
+    TEST_ACK_TX_DONE
+    if ((rf_state == RF_RX_STARTED_WHILE_CSMA) || (rf_state == RF_RX_STARTED)) {
+        rf_state = RF_RX_STARTED;
+        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
+        return;
     }
+    rf_backup_timer_stop();
+    if (((int8_t) rf_read_rf_register(RF_EDV, rf_module) > cca_threshold)) {
+        //TEST2_ON
+        rf_state = RF_IDLE;
+        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
+        //TEST2_OFF
+        return;
+    }
+    rf_irq_bbc_disable(RXFE, rf_module);
+    rf_start_tx();
 }
 
 static void rf_handle_tx_done(void)
@@ -443,9 +452,7 @@ static void rf_handle_tx_done(void)
     rf_irq_bbc_disable(TXFE, rf_module);
     rf_state = RF_IDLE;
     rf_receive(rf_rx_channel);
-    if (device_driver.phy_tx_done_cb) {
-        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_TX_SUCCESS, 0, 0);
-    }
+    device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_TX_SUCCESS, 0, 0);
 }
 
 static void rf_start_tx(void)
@@ -478,6 +485,11 @@ static void rf_handle_rx_done(void)
 {
     TEST_RX_DONE
     rf_backup_timer_stop();
+    if (rf_state == RF_RX_STARTED_WHILE_CSMA) {
+        rf_state = RF_CSMA_STARTED;
+        rf_backup_timer_start(MAX_PACKET_SENDING_TIME);
+    }
+
     if (rf_read_bbc_register(BBC_PC, rf_module) & FCSOK) {
         uint16_t rx_data_length = rf_read_rx_frame_length(rf_module);
         if (!rf_read_rx_buffer(rx_data_length, rf_module)) {
@@ -486,9 +498,7 @@ static void rf_handle_rx_done(void)
                 rf_handle_ack(rx_buffer[2], rx_buffer[0] & MAC_DATA_PENDING);
             } else {
                 int8_t rssi = (int8_t) rf_read_rf_register(RF_EDV, rf_module);
-                if (device_driver.phy_rx_cb) {
-                    device_driver.phy_rx_cb(rx_buffer, rx_data_length - 2, 0xf0, rssi, rf_radio_driver_id);
-                }
+                device_driver.phy_rx_cb(rx_buffer, rx_data_length - 2, 0xf0, rssi, rf_radio_driver_id);
                 // If auto ack used, must wait until RF returns to RF_TXPREP state
                 if ((version != MAC_FRAME_VERSION_2) && (rx_buffer[0] & FC_AR)) {
                     rf_poll_state_change(RF_TXPREP, rf_module);
@@ -496,21 +506,20 @@ static void rf_handle_rx_done(void)
             }
         }
     }
-    rf_state = RF_IDLE;
+    if (rf_state == RF_RX_STARTED) {
+        rf_state = RF_IDLE;
+    }
     rf_receive(rf_rx_channel);
 }
 
 static void rf_handle_rx_start(void)
 {
     if (rf_state == RF_CSMA_STARTED) {
-        rf_irq_rf_disable(EDC, RF_09);
-        rf_irq_rf_disable(EDC, rf_module);
-        TEST_ACK_TX_DONE
-        if (device_driver.phy_tx_done_cb) {
-            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
-        }
+        rf_backup_timer_stop();
+        rf_state = RF_RX_STARTED_WHILE_CSMA;
+    } else {
+        rf_state = RF_RX_STARTED;
     }
-    rf_state = RF_RX_STARTED;
     TEST_RX_STARTED
     rf_backup_timer_start(MAX_PACKET_SENDING_TIME);
 }
@@ -521,11 +530,9 @@ static void rf_receive(uint16_t rx_channel)
     TEST1_ON
     rf_lock();
     if (rx_channel != rf_rx_channel) {
-        uint8_t cnl = (uint8_t) rx_channel;
-        uint8_t cnh = (uint8_t) (rx_channel >> 8);
         rf_change_state(RF_TXPREP);
-        rf_write_rf_register(RF_CNL, rf_module, cnl);
-        rf_write_rf_register_field(RF_CNM, rf_module, CNH, cnh);
+        rf_write_rf_register(RF_CNL, rf_module, (uint8_t) rx_channel);
+        rf_write_rf_register_field(RF_CNM, rf_module, CNH, (uint8_t) (rx_channel >> 8));
         rf_rx_channel = rx_channel;
     }
     rf_change_state(RF_RX);
@@ -542,83 +549,55 @@ static void rf_interrupt_handler(void)
 
 static void rf_irq_task_process_irq(void)
 {
-    //TEST2_ON
-    uint8_t irq_rf09_status = 0;
+    TEST2_ON
+    uint8_t irq_rf09_status = 0, irq_bbc0_status = 0, irq_rf24_status = 0, irq_bbc1_status = 0;
     if (rf09_irq_mask) {
         irq_rf09_status = rf_read_common_register(RF09_IRQS);
         irq_rf09_status &= rf09_irq_mask;
     }
-    uint8_t irq_bbc0_status = 0;
     if (bbc0_irq_mask) {
         irq_bbc0_status = rf_read_common_register(BBC0_IRQS);
         irq_bbc0_status &= bbc0_irq_mask;
     }
-    uint8_t irq_rf24_status = 0;
     if (rf24_irq_mask) {
         irq_rf24_status = rf_read_common_register(RF24_IRQS);
         irq_rf24_status &= rf24_irq_mask;
     }
-    uint8_t irq_bbc1_status = 0;
     if (bbc1_irq_mask) {
         irq_bbc1_status = rf_read_common_register(BBC1_IRQS);
         irq_bbc1_status &= bbc1_irq_mask;
     }
 
-    if (rf_state == RF_CSMA_STARTED) {
-        if (irq_rf24_status & EDC) {
+    if ((rf_state == RF_CSMA_STARTED) || (rf_state == RF_RX_STARTED_WHILE_CSMA)) {
+        if ((irq_rf09_status & EDC) || (irq_rf24_status & EDC)) {
             rf_handle_cca_ed_done();
         }
     }
     if (rf_state == RF_TX_STARTED) {
-        if (irq_bbc1_status & TXFE) {
+        if ((irq_bbc0_status & TXFE) || (irq_bbc1_status & TXFE)) {
             rf_handle_tx_done();
         }
     }
-    if (rf_state == RF_IDLE || rf_state == RF_CSMA_STARTED) {
-        if (irq_bbc1_status & RXFS) {
+    if ((rf_state == RF_IDLE) || (rf_state == RF_CSMA_STARTED)) {
+        if ((irq_bbc0_status & RXFS) || (irq_bbc1_status & RXFS)) {
             rf_handle_rx_start();
         }
     }
-    if (rf_state == RF_RX_STARTED) {
-        if (irq_bbc1_status & RXFE) {
+    if ((rf_state == RF_RX_STARTED) || (rf_state == RF_RX_STARTED_WHILE_CSMA)) {
+        if ((irq_bbc0_status & RXFE) || (irq_bbc1_status & RXFE)) {
             rf_handle_rx_done();
         }
-        if (irq_bbc1_status & RXAM) {
-            tr_debug("RXAM");
-        }
-        if (irq_bbc1_status & RXEM) {
-            tr_debug("RXEM");
-        }
     }
-    //TEST2_OFF
-}
-
-void RFBits::rf_irq_task(void)
-{
-    for (;;) {
-        uint32_t flags = ThisThread::flags_wait_any(SIG_ALL);
-        rf_lock();
-        if (flags & SIG_RADIO) {
-            rf_irq_task_process_irq();
-        }
-        if (flags & SIG_TIMER_CCA) {
-            rf_csma_ca_timer_interrupt();
-        }
-        if (flags & SIG_TIMER_BACKUP) {
-            rf_backup_timer_interrupt();
-        }
-        rf_unlock();
-    }
+    TEST2_OFF
 }
 
 static void rf_write_tx_packet_length(uint16_t packet_length)
 {
     if (packet_length > 2047) {
-        //tr_err("Invalid TX length: %u", packet_length);
+        return;
     }
     rf_write_bbc_register(BBC_TXFLH, rf_module, (packet_length >> 8) & 0x03);
     rf_write_bbc_register(BBC_TXFLL, rf_module, (uint8_t) packet_length);
-
 }
 
 static uint16_t rf_read_rx_frame_length(rf_modules_e module)
@@ -768,6 +747,12 @@ static void rf_write_rf_register_field(uint8_t addr, rf_modules_e module, uint8_
 
 static void rf_backup_timer_interrupt(void)
 {
+    rf_read_common_register(RF09_IRQS);
+    rf_read_common_register(RF24_IRQS);
+    rf_read_common_register(BBC0_IRQS);
+    rf_read_common_register(BBC1_IRQS);
+    rf_irq_rf_disable(EDC, RF_09);
+    rf_irq_rf_disable(EDC, rf_module);
     if (rf_state == RF_RX_STARTED) {
         if (device_driver.phy_rf_statistics) {
             device_driver.phy_rf_statistics->rx_timeouts++;
@@ -778,15 +763,11 @@ static void rf_backup_timer_interrupt(void)
         }
     }
     if (rf_state == RF_TX_STARTED) {
-        if (device_driver.phy_tx_done_cb) {
-            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_TX_SUCCESS, 0, 0);
-        }
+        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_TX_SUCCESS, 0, 0);
     }
-    if (rf_state == RF_CSMA_STARTED) {
+    if ((rf_state == RF_CSMA_STARTED) || (rf_state == RF_RX_STARTED_WHILE_CSMA)) {
         TEST_ACK_TX_DONE
-        if (device_driver.phy_tx_done_cb) {
-            device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
-        }
+        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
     }
     TEST_TX_DONE
     TEST_RX_DONE
@@ -808,6 +789,26 @@ static void rf_backup_timer_start(uint32_t slots)
 {
     // Using cal_timer as backup timer
     rf->cal_timer.attach_us(rf_backup_timer_signal, slots);
+}
+
+static void (*irq_callbacks[3])(void);
+
+void RFBits::rf_irq_task(void)
+{
+    for (;;) {
+        uint32_t flags = ThisThread::flags_wait_any(SIG_ALL);
+        rf_lock();
+        if (flags & SIG_RADIO) {
+            rf_irq_task_process_irq();
+        }
+        if (flags & SIG_TIMER_CCA) {
+            rf_csma_ca_timer_interrupt();
+        }
+        if (flags & SIG_TIMER_BACKUP) {
+            rf_backup_timer_interrupt();
+        }
+        rf_unlock();
+    }
 }
 
 int RFBits::init_215_driver(RFBits *_rf, const uint8_t mac[8], uint8_t *rf_part_num)
