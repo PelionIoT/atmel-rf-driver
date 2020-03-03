@@ -176,6 +176,8 @@ static RFBits *rf;
 #define MAX_PACKET_SENDING_TIME (uint32_t)(8000000/phy_subghz.datarate)*RF_MTU + PACKET_SENDING_EXTRA_TIME
 #define ACK_SENDING_TIME (uint32_t)(8000000/phy_subghz.datarate)*ACK_FRAME_LENGTH + PACKET_SENDING_EXTRA_TIME
 
+#define MAX_STATE_TRANSITION_TIME_US    1000
+
 // t1 = 180ns, SEL falling edge to MISO active [SPI setup assumed slow enough to not need manual delay]
 #define CS_SELECT()  {rf->CS = 0; /* delay_ns(180); */}
 // t9 = 250ns, last clock to SEL rising edge, t8 = 250ns, SPI idle time between consecutive access
@@ -701,9 +703,9 @@ static rf_command_e rf_read_state(rf_modules_e module)
 
 static void rf_poll_state_change(rf_command_e state, rf_modules_e module)
 {
-    uint16_t break_counter = 0;
+    uint32_t transition_start_time = rf_get_timestamp();
     while (rf_read_state(module) != state) {
-        if (break_counter++ == 0x1ff) {
+        if (rf_get_timestamp() > (transition_start_time + MAX_STATE_TRANSITION_TIME_US)) {
             tr_err("Failed to change state from %x to: %x", rf_read_state(module), state);
             break;
         }
