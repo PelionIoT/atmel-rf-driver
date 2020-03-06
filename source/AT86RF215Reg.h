@@ -39,7 +39,9 @@ extern "C" {
 #define RF_CNL                      0x07
 #define RF_CNM                      0x08
 #define RF_RXBWC                    0x09
+#define RF_RXDFE                    0x0A
 #define RF_AGCC                     0x0B
+#define RF_AGCS                     0x0C
 #define RF_RSSI                     0x0D
 #define RF_EDC                      0x0E
 #define RF_EDV                      0x10
@@ -68,6 +70,9 @@ extern "C" {
 #define BBC_AMEDT                   0x41
 #define BBC_AMAACKTL                0x43
 #define BBC_AMAACKTH                0x44
+#define BBC_FSKC0                   0x60
+#define BBC_FSKC1                   0x61
+#define BBC_FSKC2                   0x62
 #define BBC0_FBRXS                  0x2000
 #define BBC0_FBTXS                  0x2800
 #define BBC1_FBRXS                  0x3000
@@ -75,14 +80,82 @@ extern "C" {
 
 // RF_AGCC
 #define AGCI                        (1 << 6)
+#define AVGS                        0x30
+#define AVGS_8_SAMPLES              (0 << 4)
+
+// RF_AGCS
+#define TGT                         0xE0
+#define TGT_1                       (1 << 5)
+
+
+// RF_RXBWC
+#define BW                          0x0F
+#define RF_BW2000KHZ_IF2000KHZ      (11 << 0)
+#define RF_BW1600KHZ_IF2000KHZ      (10 << 0)
+#define RF_BW1250KHZ_IF2000KHZ      (9 << 0)
+#define RF_BW1000KHZ_IF1000KHZ      (8 << 0)
+#define RF_BW800KHZ_IF1000KHZ       (7 << 0)
+#define RF_BW630KHZ_IF1000KHZ       (6 << 0)
+#define RF_BW500KHZ_IF500KHZ        (5 << 0)
+#define RF_BW400KHZ_IF500KHZ        (4 << 0)
+#define RF_BW320KHZ_IF500KHZ        (3 << 0)
+#define RF_BW250KHZ_IF250KHZ        (2 << 0)
+#define RF_BW200KHZ_IF250KHZ        (1 << 0)
+#define RF_BW160KHZ_IF250KHZ        (0 << 0)
+#define IFS                         (1 << 4)
 
 // RF_TXCUTC
+#define PARAMP                      0xC0
+#define RF_PARAMP32U                (3 << 6)
+#define RF_PARAMP16U                (2 << 6)
+#define RF_PARAMP8U                 (1 << 6)
+#define RF_PARAMP4U                 (0 << 6)
 #define LPFCUT                      0x0F
+#define RF_FLC80KHZ                 (0 << 0)
+#define RF_FLC100KHZ                (1 << 0)
+#define RF_FLC125KHZ                (2 << 0)
+#define RF_FLC160KHZ                (3 << 0)
+#define RF_FLC200KHZ                (4 << 0)
+#define RF_FLC250KHZ                (5 << 0)
+#define RF_FLC315KHZ                (6 << 0)
+#define RF_FLC400KHZ                (7 << 0)
+#define RF_FLC500KHZ                (8 << 0)
+#define RF_FLC625KHZ                (9 << 0)
+#define RF_FLC800KHZ                (10 << 0)
 #define RF_FLC1000KHZ               (11 << 0)
 
-//RF_TXDFE
+// RF_TXDFE, RF_RXDFE
 #define RCUT                        0xE0
 #define RCUT_4                      (4 << 5)
+#define RCUT_2                      (2 << 5)
+#define RCUT_1                      (1 << 5)
+#define RCUT_0                      (0 << 5)
+#define SR                          0x0F
+#define SR_10                       (10 << 0)
+#define SR_8                        (8 << 0)
+#define SR_6                        (6 << 0)
+#define SR_5                        (5 << 0)
+#define SR_4                        (4 << 0)
+#define SR_3                        (3 << 0)
+#define SR_2                        (2 << 0)
+#define SR_1                        (1 << 0)
+
+// BBC_FSKC0
+#define MIDX                        0x0E
+#define MIDX_10                     (3 << 1)
+#define MIDX_05                     (1 << 1)
+
+// BBC_FSKC1
+#define SRATE                       0x0F
+#define SRATE_400KHZ                (5 << 0)
+#define SRATE_300KHZ                (4 << 0)
+#define SRATE_200KHZ                (3 << 0)
+#define SRATE_150KHZ                (2 << 0)
+#define SRATE_100KHZ                (1 << 0)
+#define SRATE_50KHZ                 (0 << 0)
+
+// BBC_FSKC2
+#define FECIE                       (1 << 0)
 
 // BBC_AFFTM
 #define TYPE_2                      (1 << 2)

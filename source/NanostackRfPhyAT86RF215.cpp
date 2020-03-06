@@ -25,13 +25,15 @@
 #include "NanostackRfPhyAT86RF215.h"
 #include "NanostackRfPhyAtmel.h"
 #include "mbed_trace.h"
+#include "common_functions.h"
 #include <Timer.h>
 #include "Timeout.h"
 #include "SPI.h"
 
 #define TRACE_GROUP "AtRF"
 
-#define RF_MTU              127
+#define RF_MTU_15_4_2011    127
+#define RF_MTU_15_4G_2012   2047
 
 namespace {
 
@@ -69,14 +71,13 @@ static int8_t rf_address_write(phy_address_type_e address_type, uint8_t *address
 static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_ptr);
 static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_t rf_channel);
 static int8_t rf_start_csma_ca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, data_protocol_e data_protocol);
-static void rf_init_registers(void);
+static void rf_init_registers(rf_modules_e module);
 static void rf_spi_exchange(const void *tx, size_t tx_len, void *rx, size_t rx_len);
 static uint8_t rf_read_rf_register(uint8_t addr, rf_modules_e module);
 static void rf_write_rf_register(uint8_t addr, rf_modules_e module, uint8_t data);
 static void rf_write_rf_register_field(uint8_t addr, rf_modules_e module, uint8_t field, uint8_t value);
-static void rf_write_tx_packet_length(uint16_t packet_length);
+static void rf_write_tx_packet_length(uint16_t packet_length, rf_modules_e module);
 static uint16_t rf_read_rx_frame_length(rf_modules_e module);
-static uint16_t rf_read_frame_buffer_level(rf_modules_e module);
 static void rf_write_tx_buffer(uint8_t *data, uint16_t len, rf_modules_e module);
 static int rf_read_rx_buffer(uint16_t length, rf_modules_e module);
 static void rf_irq_rf_enable(uint8_t irq, rf_modules_e module);
@@ -85,8 +86,8 @@ static void rf_irq_bbc_enable(uint8_t irq, rf_modules_e module);
 static void rf_irq_bbc_disable(uint8_t irq, rf_modules_e module);
 static rf_command_e rf_read_state(rf_modules_e module);
 static void rf_poll_state_change(rf_command_e state, rf_modules_e module);
-static void rf_change_state(rf_command_e state);
-static void rf_receive(uint16_t rx_channel);
+static void rf_change_state(rf_command_e state, rf_modules_e module);
+static void rf_receive(uint16_t rx_channel, rf_modules_e module);
 static void rf_interrupt_handler(void);
 static void rf_irq_task_process_irq(void);
 static void rf_handle_cca_ed_done(void);
@@ -94,6 +95,12 @@ static void rf_start_tx(void);
 static void rf_backup_timer_interrupt(void);
 static void rf_backup_timer_stop(void);
 static void rf_backup_timer_start(uint32_t slots);
+static int rf_set_channel(uint16_t channel, rf_modules_e module);
+static int rf_set_ch0_frequency(uint32_t frequency, rf_modules_e module);
+static int rf_set_channel_spacing(uint32_t channel_spacing, rf_modules_e module);
+static int rf_set_fsk_symbol_rate_configuration(uint32_t symbol_rate, rf_modules_e module);
+static void rf_calculate_symbol_rate(uint32_t baudrate, phy_modulation_e modulation);
+static void rf_conf_set_cca_threshold(uint8_t percent);
 // Defined register read functions
 #define rf_read_bbc_register(x, y) rf_read_rf_register(x, (rf_modules_e)(y + 2))
 #define rf_read_common_register(x) rf_read_rf_register(x, COMMON)
@@ -107,18 +114,24 @@ static phy_device_driver_s device_driver;
 static rf_modules_e rf_module = RF_24;
 static uint8_t mac_tx_handle = 0;
 static rf_states_e rf_state = RF_IDLE;
-static uint8_t rx_buffer[RF_MTU];
+static uint8_t rx_buffer[RF_MTU_15_4G_2012];
 static uint8_t rf_rx_channel;
+static uint8_t rf_new_channel;
 static uint16_t tx_sequence = 0xffff;
+static uint32_t tx_time = 0;
+static uint32_t rx_time = 0;
 static uint8_t rf09_irq_mask = 0;
 static uint8_t rf24_irq_mask = 0;
 static uint8_t bbc0_irq_mask = 0;
 static uint8_t bbc1_irq_mask = 0;
 
+static bool rf_update_config = false;
 static int8_t cca_threshold = -80;
+static bool cca_enabled = true;
+static uint32_t rf_symbol_rate;
 
 /* Channel configurations for 2.4 and sub-GHz */
-static const phy_rf_channel_configuration_s phy_24ghz = {.channel_0_center_frequency = 2405000000U,
+static const phy_rf_channel_configuration_s phy_24ghz = {.channel_0_center_frequency = 2350000000U,
                                                          .channel_spacing = 5000000U,
                                                          .datarate = 250000U,
                                                          .number_of_channels = 16U,
@@ -128,6 +141,8 @@ static const phy_rf_channel_configuration_s phy_subghz = {.channel_0_center_freq
                                                           .datarate = 250000U,
                                                           .number_of_channels = 11U,
                                                           .modulation = M_OQPSK};
+
+static phy_rf_channel_configuration_s phy_current_config;
 
 static const phy_device_channel_page_s phy_channel_pages[] = {
     { CHANNEL_PAGE_0, &phy_24ghz},
@@ -173,10 +188,13 @@ static RFBits *rf;
 #define ACK_FRAME_LENGTH    3
 // Give some additional time for processing, PHY headers, CRC etc.
 #define PACKET_SENDING_EXTRA_TIME   5000
-#define MAX_PACKET_SENDING_TIME (uint32_t)(8000000/phy_subghz.datarate)*RF_MTU + PACKET_SENDING_EXTRA_TIME
-#define ACK_SENDING_TIME (uint32_t)(8000000/phy_subghz.datarate)*ACK_FRAME_LENGTH + PACKET_SENDING_EXTRA_TIME
+#define MAX_PACKET_SENDING_TIME (uint32_t)(8000000/phy_current_config.datarate)*device_driver.phy_MTU + PACKET_SENDING_EXTRA_TIME
+#define ACK_SENDING_TIME (uint32_t)(8000000/phy_current_config.datarate)*ACK_FRAME_LENGTH + PACKET_SENDING_EXTRA_TIME
 
 #define MAX_STATE_TRANSITION_TIME_US    1000
+
+#define MIN_CCA_THRESHOLD  -117
+#define MAX_CCA_THRESHOLD  -5
 
 // t1 = 180ns, SEL falling edge to MISO active [SPI setup assumed slow enough to not need manual delay]
 #define CS_SELECT()  {rf->CS = 0; /* delay_ns(180); */}
@@ -204,13 +222,9 @@ static int8_t rf_device_register(const uint8_t *mac_addr)
     rf_init();
     device_driver.PHY_MAC = (uint8_t *)mac_addr;
     device_driver.driver_description = (char *)"ATMEL_MAC";
-    if (rf_module == RF_09) {
-        device_driver.link_type = PHY_LINK_15_4_SUBGHZ_TYPE;
-    } else {
-        device_driver.link_type = PHY_LINK_15_4_2_4GHZ_TYPE;
-    }
+    device_driver.link_type = PHY_LINK_15_4_2_4GHZ_TYPE;
     device_driver.phy_channel_pages = phy_channel_pages;
-    device_driver.phy_MTU = RF_MTU;
+    device_driver.phy_MTU = RF_MTU_15_4G_2012;
     device_driver.phy_header_length = 0;
     device_driver.phy_tail_length = 0;
     device_driver.address_write = &rf_address_write;
@@ -220,6 +234,7 @@ static int8_t rf_device_register(const uint8_t *mac_addr)
     device_driver.phy_rx_cb = NULL;
     device_driver.phy_tx_done_cb = NULL;
     rf_radio_driver_id = arm_net_phy_register(&device_driver);
+    rf_update_config = true;
     return rf_radio_driver_id;
 }
 
@@ -250,22 +265,68 @@ static int8_t rf_address_write(phy_address_type_e address_type, uint8_t *address
 
 static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_ptr)
 {
+    phy_csma_params_t *csma_params;
+    uint32_t *timer_value;
     switch (extension_type) {
-        case PHY_EXTENSION_CTRL_PENDING_BIT:
-            break;
-        case PHY_EXTENSION_READ_LAST_ACK_PENDING_STATUS:
-            break;
         case PHY_EXTENSION_SET_CHANNEL:
+            if (rf_state == RF_IDLE || rf_state == RF_CSMA_STARTED) {
+                rf_receive(*data_ptr, rf_module);
+            } else {
+                // Store the new channel if couldn't change it yet.
+                rf_new_channel = *data_ptr;
+                return -1;
+            }
             break;
-        case PHY_EXTENSION_READ_CHANNEL_ENERGY:
+        case PHY_EXTENSION_READ_RX_TIME:
+            common_write_32_bit(rx_time, data_ptr);
             break;
-        case PHY_EXTENSION_READ_LINK_STATUS:
+        case PHY_EXTENSION_GET_TIMESTAMP:
+            timer_value = (uint32_t *)data_ptr;
+            *timer_value = rf_get_timestamp();
+            break;
+        case PHY_EXTENSION_SET_CSMA_PARAMETERS:
+            csma_params = (phy_csma_params_t *)data_ptr;
+            if (csma_params->backoff_time == 0) {
+                rf->cca_timer.detach();
+                if (rf_state == RF_TX_STARTED) {
+                    rf_state = RF_IDLE;
+                    rf_receive(rf_rx_channel, rf_module);
+                }
+                tx_time = 0;
+            } else {
+                tx_time = csma_params->backoff_time;
+                cca_enabled = csma_params->cca_enabled;
+            }
+            break;
+        case PHY_EXTENSION_GET_SYMBOLS_PER_SECOND:
+            timer_value = (uint32_t *)data_ptr;
+            *timer_value = rf_symbol_rate;
+            break;
+        case PHY_EXTENSION_DYNAMIC_RF_SUPPORTED:
+            *data_ptr = true;
+            break;
+        case PHY_EXTENSION_SET_RF_CONFIGURATION:
+            memcpy(&phy_current_config, data_ptr, sizeof(phy_rf_channel_configuration_s));
+            rf_calculate_symbol_rate(phy_current_config.datarate, phy_current_config.modulation);
+            if (phy_current_config.channel_0_center_frequency < 1000000000) {
+                rf_module = RF_09;
+            } else {
+                rf_module = RF_24;
+            }
+            rf_update_config = true;
+            if (rf_state == RF_IDLE) {
+                rf_receive(rf_rx_channel, rf_module);
+            }
+            break;
+        case PHY_EXTENSION_SET_CCA_THRESHOLD:
+            rf_conf_set_cca_threshold(*data_ptr);
             break;
         default:
             break;
     }
     return 0;
 }
+
 static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_t rf_channel)
 {
     int8_t ret_val = 0;
@@ -275,7 +336,7 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
         case PHY_INTERFACE_DOWN:
             break;
         case PHY_INTERFACE_UP:
-            rf_receive(rf_channel);
+            rf_receive(rf_channel, rf_module);
             break;
         case PHY_INTERFACE_RX_ENERGY_STATE:
             break;
@@ -286,7 +347,7 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
 }
 
 #ifdef TEST_GPIOS_ENABLED
-void test1_toggle(void)
+static void test1_toggle(void)
 {
     if (rf->TEST4) {
         rf->TEST4 = 0;
@@ -294,7 +355,7 @@ void test1_toggle(void)
         rf->TEST4 = 1;
     }
 }
-void test2_toggle(void)
+static void test2_toggle(void)
 {
     if (rf->TEST5) {
         rf->TEST5 = 0;
@@ -312,80 +373,91 @@ static void rf_init(void)
     fhss_uc_switch = test2_toggle;
 #endif //TEST_GPIOS_ENABLED
     rf_lock();
-    rf_change_state(RF_TRX_OFF);
-    rf_init_registers();
+    // Disable interrupts
+    rf_write_rf_register(RF_IRQM, RF_09, 0);
+    rf_write_rf_register(RF_IRQM, RF_24, 0);
+    // Ensure basebands enabled, I/Q IF's disabled
+    rf_write_rf_register_field(RF_IQIFC1, COMMON, CHPM, RF_MODE_BBRF);
+    rf_change_state(RF_TRX_OFF, RF_09);
+    rf_change_state(RF_TRX_OFF, RF_24);
+    memcpy(&phy_current_config, &phy_24ghz, sizeof(phy_rf_channel_configuration_s));
+    rf_calculate_symbol_rate(phy_current_config.datarate, phy_current_config.modulation);
+    rf_init_registers(RF_24);
     rf->IRQ.rise(&rf_interrupt_handler);
     rf->IRQ.enable_irq();
+    rf->tx_timer.start();
     rf_unlock();
 }
 
-static void rf_init_registers(void)
+static void rf_init_registers(rf_modules_e module)
 {
-    rf->tx_timer.start();
-    tr_debug("RF_IRQM: %x", rf_read_rf_register(RF_IRQM, rf_module));
+    // Disable interrupts
     rf_write_rf_register(RF_IRQM, RF_09, 0);
     rf_write_rf_register(RF_IRQM, RF_24, 0);
-
-    rf_write_bbc_register(BBC_AMEDT, rf_module, -60);
-    tr_debug("BBC_AMEDT: %x", rf_read_bbc_register(BBC_AMEDT, rf_module));
-    rf_write_bbc_register_field(BBC_PC, rf_module, PT, BB_MROQPSK);
-    rf_write_bbc_register_field(BBC_PC, rf_module, FCST, FCST);
-    rf_write_bbc_register_field(BBC_PC, rf_module, FCSFE, 0);
-    tr_debug("BBC_PC: %x", rf_read_bbc_register(BBC_PC, rf_module));
     // Ensure basebands enabled, I/Q IF's disabled
     rf_write_rf_register_field(RF_IQIFC1, COMMON, CHPM, RF_MODE_BBRF);
-
-    tr_debug("RF_IQIFC1: %x", rf_read_common_register(RF_IQIFC1));
-
-    rf_write_bbc_register_field(BBC_OQPSKC0, rf_module, FCHIP, BB_FCHIP2000);
-    rf_write_bbc_register_field(BBC_OQPSKC2, rf_module, FCSTLEG, FCS_16);
-    rf_write_bbc_register_field(BBC_OQPSKC2, rf_module, RXM, RXM_2);
-    rf_write_bbc_register_field(BBC_OQPSKPHRTX, rf_module, LEG, LEG);
-
-    tr_debug("BBC_OQPSKC0: %x", rf_read_bbc_register(BBC_OQPSKC0, rf_module));
-    tr_debug("BBC_OQPSKC1: %x", rf_read_bbc_register(BBC_OQPSKC1, rf_module));
-    tr_debug("BBC_OQPSKC2: %x", rf_read_bbc_register(BBC_OQPSKC2, rf_module));
-    tr_debug("BBC_OQPSKC3: %x", rf_read_bbc_register(BBC_OQPSKC3, rf_module));
-    tr_debug("BBC_OQPSKPHRTX: %x", rf_read_bbc_register(BBC_OQPSKPHRTX, rf_module));
-    tr_debug("BBC_OQPSKPHRRX: %x", rf_read_bbc_register(BBC_OQPSKPHRRX, rf_module));
-
-
-    rf_write_rf_register_field(RF_TXCUTC, rf_module, LPFCUT, RF_FLC1000KHZ);
-    rf_write_rf_register_field(RF_TXDFE, rf_module, RCUT, RCUT_4);
-
-    tr_debug("RF_TXCUTC: %x", rf_read_rf_register(RF_TXCUTC, rf_module));
-    tr_debug("RF_TXDFE: %x", rf_read_rf_register(RF_TXDFE, rf_module));
-
-    rf_write_rf_register(RF_CS, rf_module, 200);
-
-    tr_debug("RF_CS: %x", rf_read_rf_register(RF_CS, rf_module));
-
-
-    rf_write_rf_register(RF_CCF0L, rf_module, 0xd0);
-    rf_write_rf_register(RF_CCF0H, rf_module, 0x84);
-    tr_debug("RF_CCF0L: %x", rf_read_rf_register(RF_CCF0L, rf_module));
-    tr_debug("RF_CCF0H: %x", rf_read_rf_register(RF_CCF0H, rf_module));
-
-    tr_debug("RF_RXBWC: %x", rf_read_rf_register(RF_RXBWC, rf_module));
-
-    rf_write_bbc_register_field(BBC_AMCS, rf_module, AACK, AACK);
-    tr_debug("BBC_AMCS: %x", rf_read_bbc_register(BBC_AMCS, rf_module));
-
-    rf_write_bbc_register_field(BBC_AFC0, rf_module, AFEN0, AFEN0);
-
-    tr_debug("BBC_AFC0: %x", rf_read_bbc_register(BBC_AFC0, rf_module));
-
-//    rf_write_bbc_register(BBC_AMAACKTL, rf_module, 0);
-//    rf_write_bbc_register(BBC_AMAACKTH, rf_module, 3);
-    tr_debug("BBC_AMAACKT: %x %x", rf_read_bbc_register(BBC_AMAACKTH, rf_module), rf_read_bbc_register(BBC_AMAACKTL, rf_module));
-
-    rf_write_bbc_register_field(BBC_AFFTM, rf_module, TYPE_2, TYPE_2);
-
-    tr_debug("BBC_AFFTM: %x", rf_read_bbc_register(BBC_AFFTM, rf_module));
-
-    rf_write_rf_register_field(RF_AGCC, rf_module, AGCI, AGCI);
-    tr_debug("RF_AGCC: %x", rf_read_rf_register(RF_AGCC, rf_module));
-
+    // O-QPSK configuration using IEEE Std 802.15.4-2011
+    // FSK configuration using IEEE Std 802.15.4g-2012
+    if (phy_current_config.modulation == M_OQPSK) {
+        rf_module = RF_24;
+        device_driver.phy_MTU = RF_MTU_15_4_2011;
+        device_driver.link_type = PHY_LINK_15_4_2_4GHZ_TYPE;
+        // 16-bit FCS
+        rf_write_bbc_register_field(BBC_PC, module, FCST, FCST);
+        // Enable O-QPSK
+        rf_write_bbc_register_field(BBC_PC, module, PT, BB_MROQPSK);
+        // Chip frequency 2000kchip/s
+        rf_write_bbc_register_field(BBC_OQPSKC0, module, FCHIP, BB_FCHIP2000);
+        // FCS type legacy O-QPSK is 16-bit
+        rf_write_bbc_register_field(BBC_OQPSKC2, module, FCSTLEG, FCS_16);
+        // Listen for both MR-O-QPSK and legacy O-QPSK PHY
+        rf_write_bbc_register_field(BBC_OQPSKC2, module, RXM, RXM_2);
+        // PHY type Legacy O-QPSK
+        rf_write_bbc_register_field(BBC_OQPSKPHRTX, module, LEG, LEG);
+        // Low pass filter cut-off frequency to 1000 kHz
+        rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC1000KHZ);
+        // Set TX filter to sample frequency / 2
+        rf_write_rf_register_field(RF_TXDFE, module, RCUT, RCUT_4);
+        // Enable auto ack
+        rf_write_bbc_register_field(BBC_AMCS, module, AACK, AACK);
+        // Enable address filter unit 0
+        rf_write_bbc_register_field(BBC_AFC0, module, AFEN0, AFEN0);
+        // Allow Ack frame type with address filter
+        rf_write_bbc_register_field(BBC_AFFTM, module, TYPE_2, TYPE_2);
+    } else if (phy_current_config.modulation == M_2FSK) {
+        rf_module = RF_09;
+        device_driver.phy_MTU = RF_MTU_15_4G_2012;
+        device_driver.link_type = PHY_LINK_15_4_SUBGHZ_TYPE;
+        // Enable FSK
+        rf_write_bbc_register_field(BBC_PC, module, PT, BB_MRFSK);
+        // Disable auto ack
+        rf_write_bbc_register_field(BBC_AMCS, module, AACK, 0);
+        // Disable address filter unit 0
+        rf_write_bbc_register_field(BBC_AFC0, module, AFEN0, 0);
+        // Set modulation index
+        if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
+            rf_write_bbc_register_field(BBC_FSKC0, module, MIDX, MIDX_05);
+            rf_write_rf_register_field(RF_TXDFE, module, RCUT, RCUT_0);
+        } else {
+            rf_write_bbc_register_field(BBC_FSKC0, module, MIDX, MIDX_10);
+            rf_write_rf_register_field(RF_TXDFE, module, RCUT, RCUT_4);
+        }
+        // Set Gain control settings
+        rf_write_rf_register_field(RF_AGCS, module, AVGS, AVGS_8_SAMPLES);
+        rf_write_rf_register_field(RF_AGCS, module, TGT, TGT_1);
+        // Set symbol rate and related configurations
+        rf_set_fsk_symbol_rate_configuration(phy_current_config.datarate, module);
+    }
+    // Disable filtering FCS
+    rf_write_bbc_register_field(BBC_PC, module, FCSFE, 0);
+    // Enable using unfiltered signal in AGC
+    rf_write_rf_register_field(RF_AGCC, module, AGCI, AGCI);
+    // Set channel spacing
+    rf_set_channel_spacing(phy_current_config.channel_spacing, module);
+    // Set channel 0 center frequency
+    rf_set_ch0_frequency(phy_current_config.channel_0_center_frequency, module);
+    // Set channel (must be called after frequency change)
+    rf_set_channel(rf_rx_channel, module);
 }
 
 static void rf_csma_ca_timer_interrupt(void)
@@ -421,29 +493,63 @@ static int8_t rf_start_csma_ca(uint8_t *data_ptr, uint16_t data_length, uint8_t 
         tx_sequence = *(data_ptr + 2);
     }
     rf_write_tx_buffer(data_ptr, data_length, rf_module);
-    rf_write_tx_packet_length(data_length + 2);
+    if (phy_current_config.modulation == M_OQPSK) {
+        data_length += 2;
+    } else if (phy_current_config.modulation == M_2FSK) {
+        data_length += 4;
+    }
+    rf_write_tx_packet_length(data_length, rf_module);
     mac_tx_handle = tx_handle;
-    rf->cca_timer.attach_us(rf_csma_ca_timer_signal, 100);
+
+    if (tx_time) {
+        uint32_t backoff_time = tx_time - rf_get_timestamp();
+        // Max. time to TX can be 65ms, otherwise time has passed already -> send immediately
+        if (backoff_time <= 65000) {
+            rf->cca_timer.attach_us(rf_csma_ca_timer_signal, backoff_time);
+            rf_unlock();
+            return 0;
+        }
+    }
+    // Short timeout to start CCA immediately.
+    rf->cca_timer.attach_us(rf_csma_ca_timer_signal, 1);
     rf_unlock();
     return 0;
 }
 
 static void rf_handle_cca_ed_done(void)
 {
+    TEST_ACK_TX_DONE
     rf_irq_rf_disable(EDC, RF_09);
     rf_irq_rf_disable(EDC, rf_module);
-    TEST_ACK_TX_DONE
-    if ((rf_state == RF_RX_STARTED) || (rf_state == RF_CSMA_WHILE_RX)) {
+
+    int8_t status = device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_PREPARE, 0, 0);
+    if (status == PHY_TX_NOT_ALLOWED) {
+        if (rf_state == RF_CSMA_STARTED) {
+            rf_state = RF_IDLE;
+        }
+        return;
+    }
+    if ((cca_enabled == true) && ((rf_state == RF_RX_STARTED) || (rf_state == RF_CSMA_WHILE_RX))) {
         rf_state = RF_RX_STARTED;
         device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
         return;
     }
     rf_backup_timer_stop();
-    if (((int8_t) rf_read_rf_register(RF_EDV, rf_module) > cca_threshold)) {
-        //TEST2_ON
+    if (status == PHY_RESTART_CSMA) {
+        device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_OK, 0, 0);
+        if (tx_time) {
+            uint32_t backoff_time = tx_time - rf_get_timestamp();
+            // Max. time to TX can be 65ms, otherwise time has passed already -> send immediately
+            if (backoff_time > 65000) {
+                backoff_time = 1;
+            }
+            rf->cca_timer.attach_us(rf_csma_ca_timer_signal, backoff_time);
+        }
+        return;
+    }
+    if ((cca_enabled == true) && (((int8_t) rf_read_rf_register(RF_EDV, rf_module) > cca_threshold))) {
         rf_state = RF_IDLE;
         device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
-        //TEST2_OFF
         return;
     }
     rf_irq_bbc_disable(RXFE, rf_module);
@@ -456,15 +562,15 @@ static void rf_handle_tx_done(void)
     TEST_TX_DONE
     rf_irq_bbc_disable(TXFE, rf_module);
     rf_state = RF_IDLE;
-    rf_receive(rf_rx_channel);
+    rf_receive(rf_rx_channel, rf_module);
     device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_TX_SUCCESS, 0, 0);
 }
 
 static void rf_start_tx(void)
 {
-    rf_change_state(RF_TXPREP);
+    rf_change_state(RF_TXPREP, rf_module);
     rf_irq_bbc_enable(TXFE, rf_module);
-    rf_change_state(RF_TX);
+    rf_change_state(RF_TX, rf_module);
     rf_state = RF_TX_STARTED;
     TEST_TX_STARTED
     rf_backup_timer_start(MAX_PACKET_SENDING_TIME);
@@ -488,13 +594,15 @@ static void rf_handle_ack(uint8_t seq_number, uint8_t pending)
 
 static void rf_handle_rx_done(void)
 {
+    uint8_t rx_channel;
     TEST_RX_DONE
     rf_backup_timer_stop();
     if (rf_state == RF_CSMA_WHILE_RX) {
         rf_state = RF_CSMA_STARTED;
         rf_backup_timer_start(MAX_PACKET_SENDING_TIME);
+    } else if (rf_state == RF_RX_STARTED) {
+        rf_state = RF_IDLE;
     }
-
     if (rf_read_bbc_register(BBC_PC, rf_module) & FCSOK) {
         uint16_t rx_data_length = rf_read_rx_frame_length(rf_module);
         if (!rf_read_rx_buffer(rx_data_length, rf_module)) {
@@ -503,7 +611,12 @@ static void rf_handle_rx_done(void)
                 rf_handle_ack(rx_buffer[2], rx_buffer[0] & MAC_DATA_PENDING);
             } else {
                 int8_t rssi = (int8_t) rf_read_rf_register(RF_EDV, rf_module);
-                device_driver.phy_rx_cb(rx_buffer, rx_data_length - 2, 0xf0, rssi, rf_radio_driver_id);
+                if (phy_current_config.modulation == M_OQPSK) {
+                    rx_data_length -= 2;
+                } else if (phy_current_config.modulation == M_2FSK) {
+                    rx_data_length -= 4;
+                }
+                device_driver.phy_rx_cb(rx_buffer, rx_data_length, 0xf0, rssi, rf_radio_driver_id);
                 // If auto ack used, must wait until RF returns to RF_TXPREP state
                 if ((version != MAC_FRAME_VERSION_2) && (rx_buffer[0] & FC_AR)) {
                     wait_us(50);
@@ -511,15 +624,20 @@ static void rf_handle_rx_done(void)
                 }
             }
         }
+        rx_channel = rf_rx_channel;
+    } else {
+        // In case the channel change was called during reception, driver is responsible to change the channel if CRC failed.
+        rx_channel = rf_new_channel;
+        if (device_driver.phy_rf_statistics) {
+            device_driver.phy_rf_statistics->crc_fails++;
+        }
     }
-    if (rf_state == RF_RX_STARTED) {
-        rf_state = RF_IDLE;
-    }
-    rf_receive(rf_rx_channel);
+    rf_receive(rx_channel, rf_module);
 }
 
 static void rf_handle_rx_start(void)
 {
+    rx_time = rf_get_timestamp();
     if (rf_state == RF_CSMA_STARTED) {
         rf_backup_timer_stop();
         rf_state = RF_CSMA_WHILE_RX;
@@ -530,22 +648,25 @@ static void rf_handle_rx_start(void)
     rf_backup_timer_start(MAX_PACKET_SENDING_TIME);
 }
 
-static void rf_receive(uint16_t rx_channel)
+static void rf_receive(uint16_t rx_channel, rf_modules_e module)
 {
     TEST_RX_DONE
-    TEST1_ON
     rf_lock();
-    if (rx_channel != rf_rx_channel) {
-        rf_change_state(RF_TXPREP);
-        rf_write_rf_register(RF_CNL, rf_module, (uint8_t) rx_channel);
-        rf_write_rf_register_field(RF_CNM, rf_module, CNH, (uint8_t) (rx_channel >> 8));
-        rf_rx_channel = rx_channel;
+    if (rf_update_config == true) {
+        rf_update_config = false;
+        rf_change_state(RF_TRX_OFF, module);
+        rf_init_registers(module);
+        rf_change_state(RF_TXPREP, module);
     }
-    rf_change_state(RF_RX);
-    rf_irq_bbc_enable(RXFS, rf_module);
-    rf_irq_bbc_enable(RXFE, rf_module);
+    if (rx_channel != rf_rx_channel) {
+        rf_change_state(RF_TXPREP, module);
+        rf_set_channel(rx_channel, module);
+        rf_rx_channel = rf_new_channel = rx_channel;
+    }
+    rf_change_state(RF_RX, module);
+    rf_irq_bbc_enable(RXFS, module);
+    rf_irq_bbc_enable(RXFE, module);
     rf_unlock();
-    TEST1_OFF
 }
 
 static void rf_interrupt_handler(void)
@@ -555,7 +676,6 @@ static void rf_interrupt_handler(void)
 
 static void rf_irq_task_process_irq(void)
 {
-    TEST2_ON
     uint8_t irq_rf09_status = 0, irq_bbc0_status = 0, irq_rf24_status = 0, irq_bbc1_status = 0;
     if (rf09_irq_mask) {
         irq_rf09_status = rf_read_common_register(RF09_IRQS);
@@ -593,32 +713,20 @@ static void rf_irq_task_process_irq(void)
             rf_handle_rx_done();
         }
     }
-    TEST2_OFF
 }
 
-static void rf_write_tx_packet_length(uint16_t packet_length)
+static void rf_write_tx_packet_length(uint16_t packet_length, rf_modules_e module)
 {
     if (packet_length > 2047) {
         return;
     }
-    rf_write_bbc_register(BBC_TXFLH, rf_module, (packet_length >> 8) & 0x03);
-    rf_write_bbc_register(BBC_TXFLL, rf_module, (uint8_t) packet_length);
+    rf_write_bbc_register(BBC_TXFLH, module, (uint8_t) (packet_length >> 8));
+    rf_write_bbc_register(BBC_TXFLL, module, (uint8_t) packet_length);
 }
 
 static uint16_t rf_read_rx_frame_length(rf_modules_e module)
 {
     const uint8_t tx[2] = { static_cast<uint8_t>(module + 2), static_cast<uint8_t>(BBC_RXFLL) };
-    uint8_t rx[2];
-    CS_SELECT();
-    rf_spi_exchange(tx, 2, NULL, 0);
-    rf_spi_exchange(NULL, 0, rx, 2);
-    CS_RELEASE();
-    return (uint16_t)((rx[1] << 8) | rx[0]);
-}
-
-static uint16_t rf_read_frame_buffer_level(rf_modules_e module)
-{
-    const uint8_t tx[2] = { static_cast<uint8_t>(module + 2), static_cast<uint8_t>(BBC_FBLL) };
     uint8_t rx[2];
     CS_SELECT();
     rf_spi_exchange(tx, 2, NULL, 0);
@@ -639,7 +747,7 @@ static void rf_write_tx_buffer(uint8_t *data, uint16_t len, rf_modules_e module)
 
 static int rf_read_rx_buffer(uint16_t length, rf_modules_e module)
 {
-    if (length > RF_MTU) {
+    if (length > device_driver.phy_MTU) {
         return -1;
     }
     uint8_t *ptr = rx_buffer;
@@ -655,10 +763,10 @@ static int rf_read_rx_buffer(uint16_t length, rf_modules_e module)
 static void rf_irq_rf_enable(uint8_t irq, rf_modules_e module)
 {
     if ((module == RF_09) && !(rf09_irq_mask & irq)) {
-        rf_write_rf_register_field(RF_IRQM, rf_module, irq, irq);
+        rf_write_rf_register_field(RF_IRQM, module, irq, irq);
         rf09_irq_mask |= irq;
     } else if ((module == RF_24) && !(rf24_irq_mask & irq)) {
-        rf_write_rf_register_field(RF_IRQM, rf_module, irq, irq);
+        rf_write_rf_register_field(RF_IRQM, module, irq, irq);
         rf24_irq_mask |= irq;
     }
 }
@@ -666,10 +774,10 @@ static void rf_irq_rf_enable(uint8_t irq, rf_modules_e module)
 static void rf_irq_rf_disable(uint8_t irq, rf_modules_e module)
 {
     if ((module == RF_09) && (rf09_irq_mask & irq)) {
-        rf_write_rf_register_field(RF_IRQM, rf_module, irq, 0);
+        rf_write_rf_register_field(RF_IRQM, module, irq, 0);
         rf09_irq_mask &= ~irq;
     } else if ((module == RF_24) && (rf24_irq_mask & irq)) {
-        rf_write_rf_register_field(RF_IRQM, rf_module, irq, 0);
+        rf_write_rf_register_field(RF_IRQM, module, irq, 0);
         rf24_irq_mask &= ~irq;
     }
 }
@@ -706,16 +814,16 @@ static void rf_poll_state_change(rf_command_e state, rf_modules_e module)
     uint32_t transition_start_time = rf_get_timestamp();
     while (rf_read_state(module) != state) {
         if (rf_get_timestamp() > (transition_start_time + MAX_STATE_TRANSITION_TIME_US)) {
-            tr_err("Failed to change state from %x to: %x", rf_read_state(module), state);
+            tr_err("Failed to change module %u state from %x to: %x", module, rf_read_state(module), state);
             break;
         }
     }
 }
 
-static void rf_change_state(rf_command_e state)
+static void rf_change_state(rf_command_e state, rf_modules_e module)
 {
-    rf_write_rf_register(RF_CMD, rf_module, state);
-    return rf_poll_state_change(state, rf_module);
+    rf_write_rf_register(RF_CMD, module, state);
+    return rf_poll_state_change(state, module);
 }
 
 static void rf_spi_exchange(const void *tx, size_t tx_len, void *rx, size_t rx_len)
@@ -757,7 +865,7 @@ static void rf_backup_timer_interrupt(void)
     rf_read_common_register(BBC0_IRQS);
     rf_read_common_register(BBC1_IRQS);
     rf_irq_rf_disable(EDC, RF_09);
-    rf_irq_rf_disable(EDC, rf_module);
+    rf_irq_rf_disable(EDC, RF_24);
     if (rf_state == RF_RX_STARTED) {
         if (device_driver.phy_rf_statistics) {
             device_driver.phy_rf_statistics->rx_timeouts++;
@@ -777,7 +885,7 @@ static void rf_backup_timer_interrupt(void)
     TEST_TX_DONE
     TEST_RX_DONE
     rf_state = RF_IDLE;
-    rf_receive(rf_rx_channel);
+    rf_receive(rf_rx_channel, rf_module);
 }
 
 static void rf_backup_timer_signal(void)
@@ -796,7 +904,142 @@ static void rf_backup_timer_start(uint32_t slots)
     rf->cal_timer.attach_us(rf_backup_timer_signal, slots);
 }
 
-static void (*irq_callbacks[3])(void);
+static int rf_set_channel(uint16_t channel, rf_modules_e module)
+{
+    rf_write_rf_register(RF_CNL, module, (uint8_t) channel);
+    rf_write_rf_register_field(RF_CNM, module, CNH, (uint8_t) (channel >> 8));
+    return 0;
+}
+
+static int rf_set_ch0_frequency(uint32_t frequency, rf_modules_e module)
+{
+    if (module == RF_24) {
+        frequency -= 1500000000;
+    }
+    frequency /= 25000;
+    rf_write_rf_register(RF_CCF0L, module, (uint8_t)frequency);
+    rf_write_rf_register(RF_CCF0H, module, (uint8_t)(frequency >> 8));
+    return 0;
+}
+
+static int rf_set_channel_spacing(uint32_t channel_spacing, rf_modules_e module)
+{
+    channel_spacing /= 25000;
+    rf_write_rf_register(RF_CS, module, channel_spacing);
+    return 0;
+}
+
+static int rf_set_fsk_symbol_rate_configuration(uint32_t symbol_rate, rf_modules_e module)
+{
+    if (symbol_rate == 50000) {
+        rf_write_bbc_register_field(BBC_FSKC1, module, SRATE, SRATE_50KHZ);
+        rf_write_rf_register_field(RF_TXDFE, module, SR, SR_10);
+        rf_write_rf_register_field(RF_RXDFE, module, SR, SR_10);
+        if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_0);
+        } else {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_1);
+        }
+        rf_write_rf_register_field(RF_TXCUTC, module, PARAMP, RF_PARAMP32U);
+        rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC80KHZ);
+        rf_write_rf_register_field(RF_RXBWC, module, BW, RF_BW160KHZ_IF250KHZ);
+        rf_write_rf_register_field(RF_RXBWC, module, IFS, 0);
+    } else if (symbol_rate == 100000) {
+        rf_write_bbc_register_field(BBC_FSKC1, module, SRATE, SRATE_100KHZ);
+        rf_write_rf_register_field(RF_TXDFE, module, SR, SR_5);
+        rf_write_rf_register_field(RF_RXDFE, module, SR, SR_5);
+        rf_write_rf_register_field(RF_TXCUTC, module, PARAMP, RF_PARAMP16U);
+        if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_0);
+            rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC100KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, BW, RF_BW200KHZ_IF250KHZ);
+        } else {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_1);
+            rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC160KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, BW, RF_BW320KHZ_IF500KHZ);
+        }
+        rf_write_rf_register_field(RF_RXBWC, module, IFS, 0);
+    } else if (symbol_rate == 150000) {
+        rf_write_bbc_register_field(BBC_FSKC1, module, SRATE, SRATE_150KHZ);
+        rf_write_rf_register_field(RF_TXDFE, module, SR, SR_2);
+        rf_write_rf_register_field(RF_RXDFE, module, SR, SR_4);
+        rf_write_rf_register_field(RF_TXCUTC, module, PARAMP, RF_PARAMP16U);
+        if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_0);
+            rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC160KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, BW, RF_BW320KHZ_IF500KHZ);
+        } else {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_1);
+            rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC250KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, BW, RF_BW400KHZ_IF500KHZ);
+        }
+        rf_write_rf_register_field(RF_RXBWC, module, IFS, 0);
+    } else if (symbol_rate == 200000) {
+        rf_write_bbc_register_field(BBC_FSKC1, module, SRATE, SRATE_200KHZ);
+        rf_write_rf_register_field(RF_TXDFE, module, SR, SR_2);
+        rf_write_rf_register_field(RF_RXDFE, module, SR, SR_4);
+        rf_write_rf_register_field(RF_TXCUTC, module, PARAMP, RF_PARAMP16U);
+        if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_1);
+            rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC200KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, BW, RF_BW320KHZ_IF500KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, IFS, 0);
+        } else {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_2);
+            rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC315KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, BW, RF_BW500KHZ_IF500KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, IFS, IFS);
+        }
+    } else if (symbol_rate == 300000) {
+        rf_write_bbc_register_field(BBC_FSKC1, module, SRATE, SRATE_300KHZ);
+        rf_write_rf_register_field(RF_TXDFE, module, SR, SR_1);
+        rf_write_rf_register_field(RF_RXDFE, module, SR, SR_2);
+        rf_write_rf_register_field(RF_TXCUTC, module, PARAMP, RF_PARAMP8U);
+        if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_0);
+            rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC315KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, BW, RF_BW500KHZ_IF500KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, IFS, IFS);
+        } else {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_1);
+            rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC500KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, BW, RF_BW630KHZ_IF1000KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, IFS, 0);
+        }
+    } else if (symbol_rate == 400000) {
+        rf_write_bbc_register_field(BBC_FSKC1, module, SRATE, SRATE_400KHZ);
+        rf_write_rf_register_field(RF_TXDFE, module, SR, SR_1);
+        rf_write_rf_register_field(RF_RXDFE, module, SR, SR_2);
+        rf_write_rf_register_field(RF_TXCUTC, module, PARAMP, RF_PARAMP8U);
+        if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_0);
+            rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC400KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, BW, RF_BW630KHZ_IF1000KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, IFS, 0);
+        } else {
+            rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_1);
+            rf_write_rf_register_field(RF_TXCUTC, module, LPFCUT, RF_FLC625KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, BW, RF_BW1000KHZ_IF1000KHZ);
+            rf_write_rf_register_field(RF_RXBWC, module, IFS, IFS);
+        }
+    }
+    return 0;
+}
+
+static void rf_conf_set_cca_threshold(uint8_t percent)
+{
+    uint8_t step = (MAX_CCA_THRESHOLD-MIN_CCA_THRESHOLD);
+    cca_threshold = MIN_CCA_THRESHOLD + (step * percent) / 100;
+}
+
+static void rf_calculate_symbol_rate(uint32_t baudrate, phy_modulation_e modulation)
+{
+    uint8_t bits_in_symbols = 4;
+    if (modulation == M_2FSK) {
+        bits_in_symbols = 1;
+    }
+    rf_symbol_rate = baudrate / bits_in_symbols;
+}
 
 void RFBits::rf_irq_task(void)
 {
