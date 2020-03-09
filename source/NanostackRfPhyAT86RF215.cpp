@@ -101,7 +101,7 @@ static int rf_set_channel_spacing(uint32_t channel_spacing, rf_modules_e module)
 static int rf_set_fsk_symbol_rate_configuration(uint32_t symbol_rate, rf_modules_e module);
 static void rf_calculate_symbol_rate(uint32_t baudrate, phy_modulation_e modulation);
 static void rf_conf_set_cca_threshold(uint8_t percent);
-// Defined register read functions
+// Defined register read/write functions
 #define rf_read_bbc_register(x, y) rf_read_rf_register(x, (rf_modules_e)(y + 2))
 #define rf_read_common_register(x) rf_read_rf_register(x, COMMON)
 #define rf_write_bbc_register(x, y, z) rf_write_rf_register(x, (rf_modules_e)(y + 2), z)
@@ -157,32 +157,16 @@ using namespace rtos;
 static RFBits *rf;
 
 #define MAC_FRAME_TYPE_MASK     0x07
-#define MAC_FRAME_BEACON        (0)
-#define MAC_TYPE_DATA           (1)
 #define MAC_TYPE_ACK            (2)
-#define MAC_TYPE_COMMAND        (3)
 #define MAC_DATA_PENDING        0x10
-#define FC_DST_MODE             0x0C
-#define FC_SRC_MODE             0xC0
-#define FC_DST_ADDR_NONE        0x00
-#define FC_DST_16_BITS          0x08
-#define FC_DST_64_BITS          0x0C
-#define FC_SRC_64_BITS          0xC0
-#define FC_SEQUENCE_COMPRESSION 0x01
 #define FC_AR                   0x20
-#define FC_PAN_ID_COMPRESSION   0x40
 #define VERSION_FIELD_MASK      0x30
-#define SHIFT_SEQ_COMP_FIELD    (0)
 #define SHIFT_VERSION_FIELD     (4)
-#define SHIFT_PANID_COMP_FIELD  (6)
-#define OFFSET_DST_PAN_ID       (3)
-#define OFFSET_DST_ADDR         (5)
 
 #define SIG_RADIO           1
-#define SIG_TIMER_ACK       2
-#define SIG_TIMER_BACKUP    4
-#define SIG_TIMER_CCA       8
-#define SIG_TIMERS (SIG_TIMER_ACK|SIG_TIMER_BACKUP|SIG_TIMER_CCA)
+#define SIG_TIMER_BACKUP    2
+#define SIG_TIMER_CCA       4
+#define SIG_TIMERS (SIG_TIMER_BACKUP|SIG_TIMER_CCA)
 #define SIG_ALL (SIG_RADIO|SIG_TIMERS)
 
 #define ACK_FRAME_LENGTH    3
@@ -195,12 +179,6 @@ static RFBits *rf;
 
 #define MIN_CCA_THRESHOLD  -117
 #define MAX_CCA_THRESHOLD  -5
-
-// t1 = 180ns, SEL falling edge to MISO active [SPI setup assumed slow enough to not need manual delay]
-#define CS_SELECT()  {rf->CS = 0; /* delay_ns(180); */}
-// t9 = 250ns, last clock to SEL rising edge, t8 = 250ns, SPI idle time between consecutive access
-#define CS_RELEASE() {wait_ns(250); rf->CS = 1; wait_ns(250);}
-
 
 static uint32_t rf_get_timestamp(void)
 {
@@ -391,11 +369,6 @@ static void rf_init(void)
 
 static void rf_init_registers(rf_modules_e module)
 {
-    // Disable interrupts
-    rf_write_rf_register(RF_IRQM, RF_09, 0);
-    rf_write_rf_register(RF_IRQM, RF_24, 0);
-    // Ensure basebands enabled, I/Q IF's disabled
-    rf_write_rf_register_field(RF_IQIFC1, COMMON, CHPM, RF_MODE_BBRF);
     // O-QPSK configuration using IEEE Std 802.15.4-2011
     // FSK configuration using IEEE Std 802.15.4g-2012
     if (phy_current_config.modulation == M_OQPSK) {
@@ -594,7 +567,6 @@ static void rf_handle_ack(uint8_t seq_number, uint8_t pending)
 
 static void rf_handle_rx_done(void)
 {
-    uint8_t rx_channel;
     TEST_RX_DONE
     rf_backup_timer_stop();
     if (rf_state == RF_CSMA_WHILE_RX) {
@@ -624,15 +596,12 @@ static void rf_handle_rx_done(void)
                 }
             }
         }
-        rx_channel = rf_rx_channel;
     } else {
-        // In case the channel change was called during reception, driver is responsible to change the channel if CRC failed.
-        rx_channel = rf_new_channel;
         if (device_driver.phy_rf_statistics) {
             device_driver.phy_rf_statistics->crc_fails++;
         }
     }
-    rf_receive(rx_channel, rf_module);
+    rf_receive(rf_new_channel, rf_module);
 }
 
 static void rf_handle_rx_start(void)
@@ -717,7 +686,7 @@ static void rf_irq_task_process_irq(void)
 
 static void rf_write_tx_packet_length(uint16_t packet_length, rf_modules_e module)
 {
-    if (packet_length > 2047) {
+    if (packet_length > device_driver.phy_MTU) {
         return;
     }
     rf_write_bbc_register(BBC_TXFLH, module, (uint8_t) (packet_length >> 8));
@@ -728,10 +697,10 @@ static uint16_t rf_read_rx_frame_length(rf_modules_e module)
 {
     const uint8_t tx[2] = { static_cast<uint8_t>(module + 2), static_cast<uint8_t>(BBC_RXFLL) };
     uint8_t rx[2];
-    CS_SELECT();
+    rf->CS = 0;
     rf_spi_exchange(tx, 2, NULL, 0);
     rf_spi_exchange(NULL, 0, rx, 2);
-    CS_RELEASE();
+    rf->CS = 1;
     return (uint16_t)((rx[1] << 8) | rx[0]);
 }
 
@@ -739,10 +708,10 @@ static void rf_write_tx_buffer(uint8_t *data, uint16_t len, rf_modules_e module)
 {
     uint16_t buffer_addr = BBC0_FBTXS + (0x1000 * (module - 1));
     const uint8_t tx[2] = { static_cast<uint8_t>(0x80 | (buffer_addr >> 8)), static_cast<uint8_t>(buffer_addr) };
-    CS_SELECT();
+    rf->CS = 0;
     rf_spi_exchange(tx, 2, NULL, 0);
     rf_spi_exchange(data, len, NULL, 0);
-    CS_RELEASE();
+    rf->CS = 1;
 }
 
 static int rf_read_rx_buffer(uint16_t length, rf_modules_e module)
@@ -753,10 +722,10 @@ static int rf_read_rx_buffer(uint16_t length, rf_modules_e module)
     uint8_t *ptr = rx_buffer;
     uint16_t buffer_addr = BBC0_FBRXS + (0x1000 * (module - 1));
     const uint8_t tx[2] = { static_cast<uint8_t>(buffer_addr >> 8), static_cast<uint8_t>(buffer_addr) };
-    CS_SELECT();
+    rf->CS = 0;
     rf_spi_exchange(tx, 2, NULL, 0);
     rf_spi_exchange(NULL, 0, ptr, length);
-    CS_RELEASE();
+    rf->CS = 1;
     return 0;
 }
 
@@ -835,9 +804,9 @@ static uint8_t rf_read_rf_register(uint8_t addr, rf_modules_e module)
 {
     const uint8_t tx[2] = { static_cast<uint8_t>(module), static_cast<uint8_t>(addr) };
     uint8_t rx[3];
-    CS_SELECT();
+    rf->CS = 0;
     rf_spi_exchange(tx, 2, rx, 3);
-    CS_RELEASE();
+    rf->CS = 1;
     return rx[2];
 }
 
@@ -845,9 +814,9 @@ static void rf_write_rf_register(uint8_t addr, rf_modules_e module, uint8_t data
 {
     const uint8_t tx[3] = { static_cast<uint8_t>(0x80 | module), static_cast<uint8_t>(addr), static_cast<uint8_t>(data) };
     uint8_t rx[2];
-    CS_SELECT();
+    rf->CS = 0;
     rf_spi_exchange(tx, 3, rx, 2);
-    CS_RELEASE();
+    rf->CS = 1;
 }
 
 static void rf_write_rf_register_field(uint8_t addr, rf_modules_e module, uint8_t field, uint8_t value)
