@@ -26,7 +26,7 @@
 #include "NanostackRfPhy.h"
 
 // Uncomment to use testing gpios attached to TX/RX processes
- #define TEST_GPIOS_ENABLED
+// #define TEST_GPIOS_ENABLED
 
 // Arduino pin defaults for convenience
 #if !defined(ATMEL_SPI_MOSI)

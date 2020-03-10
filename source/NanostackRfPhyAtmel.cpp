@@ -662,8 +662,10 @@ static void rf_if_write_rf_settings(void)
     /* Auto CRC on, IRQ status shows unmasked only, TRX_STATUS output on all accesses */
     rf_if_write_register(TRX_CTRL_1, TX_AUTO_CRC_ON | SPI_CMD_MODE_TRX_STATUS);
 
-    rf_if_write_register(IRQ_MASK, CCA_ED_DONE | TRX_END | TRX_UR | RX_START);
-
+    rf_if_write_register(IRQ_MASK, CCA_ED_DONE | TRX_END | TRX_UR);
+#ifdef TEST_GPIOS_ENABLED
+    rf_if_set_bit(IRQ_MASK, RX_START, RX_START);
+#endif
     xah_ctrl_1 = rf_if_read_register(XAH_CTRL_1);
 
     /*Read transceiver PART_NUM*/
@@ -1012,10 +1014,11 @@ static void rf_if_interrupt_handler(void)
     /*Read and clear interrupt flag, and pick up trx_status*/
     irq_status = rf_if_read_register_with_status(IRQ_STATUS, &full_trx_status);
 
-
+#ifdef TEST_GPIOS_ENABLED
     if (irq_status & RX_START) {
         TEST_RX_STARTED
     }
+#endif
     /*Frame end interrupt (RX and TX)*/
     if (irq_status & TRX_END) {
         rf_trx_states_t trx_status = rf_if_trx_status_from_full(full_trx_status);
@@ -1126,7 +1129,6 @@ static int8_t rf_device_register(const uint8_t *mac_addr)
     rf_init();
 
     radio_type = rf_radio_type_read();
-
     if (radio_type != ATMEL_UNKNOW_DEV) {
         /*Set pointer to MAC address*/
         device_driver.PHY_MAC = (uint8_t *)mac_addr;
@@ -2213,21 +2215,18 @@ int8_t NanostackRfPhyAtmel::rf_register()
     }
     /*Reset RF module*/
     rf_if_reset_radio();
-    // First try for RF types 231, 233, 212.
     rf_part_num = rf_if_read_part_num();
     int8_t radio_id = -1;
     if (rf_part_num != PART_AT86RF231 && rf_part_num != PART_AT86RF233 && rf_part_num != PART_AT86RF212) {
-        // Otherwise try for RF type 215. Jumps to AT86RF215 driver.
+        // Register RF type 215. Jumps to AT86RF215 driver.
         radio_id = rf->init_215_driver(_rf, _mac_addr, &rf_part_num);
+    } else {
+        // Register other RF types.
+        radio_id = rf_device_register(_mac_addr);
     }
     tr_info("RF part number: %x", rf_part_num);
     if (radio_id < 0) {
-        radio_id = rf_device_register(_mac_addr);
-        rf->irq_thread_215.terminate();
-    } else {
-        rf->irq_thread.terminate();
-    }
-    if (radio_id < 0) {
+        tr_err("RF registration failed");
         rf = NULL;
     }
 
