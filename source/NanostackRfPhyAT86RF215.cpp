@@ -448,18 +448,13 @@ static void rf_csma_ca_timer_signal(void)
 
 static int8_t rf_start_csma_ca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, data_protocol_e data_protocol)
 {
-    TEST_ACK_TX_STARTED
     rf_lock();
-    if ((rf_state != RF_IDLE) && (rf_state != RF_RX_STARTED)) {
+    if (rf_state != RF_IDLE) {
         rf_unlock();
-        TEST_ACK_TX_DONE
         return -1;
     }
-    if (rf_state == RF_RX_STARTED) {
-        rf_state = RF_CSMA_WHILE_RX;
-    } else {
-        rf_state = RF_CSMA_STARTED;
-    }
+    rf_state = RF_CSMA_STARTED;
+
     // If Ack is requested, store the MAC sequence. This will be compared with received Ack.
     uint8_t version = ((*(data_ptr + 1) & VERSION_FIELD_MASK) >> SHIFT_VERSION_FIELD);
     if ((version != MAC_FRAME_VERSION_2) && (*data_ptr & FC_AR)) {
@@ -491,9 +486,11 @@ static int8_t rf_start_csma_ca(uint8_t *data_ptr, uint16_t data_length, uint8_t 
 
 static void rf_handle_cca_ed_done(void)
 {
-    TEST_ACK_TX_DONE
     rf_irq_rf_disable(EDC, RF_09);
     rf_irq_rf_disable(EDC, rf_module);
+    if (rf_state == RF_CSMA_WHILE_RX) {
+        rf_state = RF_RX_STARTED;
+    }
 
     int8_t status = device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_PREPARE, 0, 0);
     if (status == PHY_TX_NOT_ALLOWED) {
@@ -502,8 +499,7 @@ static void rf_handle_cca_ed_done(void)
         }
         return;
     }
-    if ((cca_enabled == true) && ((rf_state == RF_RX_STARTED) || (rf_state == RF_CSMA_WHILE_RX))) {
-        rf_state = RF_RX_STARTED;
+    if ((cca_enabled == true) && (rf_state == RF_RX_STARTED)) {
         device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
         return;
     }
@@ -848,7 +844,6 @@ static void rf_backup_timer_interrupt(void)
         device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_TX_SUCCESS, 0, 0);
     }
     if ((rf_state == RF_CSMA_STARTED) || (rf_state == RF_CSMA_WHILE_RX)) {
-        TEST_ACK_TX_DONE
         device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_FAIL, 0, 0);
     }
     TEST_TX_DONE
