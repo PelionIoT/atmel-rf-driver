@@ -19,7 +19,6 @@
 
 #include "at24mac.h"
 #include "PinNames.h"
-#include "NanostackRfPhyAT86RF215.h"
 
 #if defined(MBED_CONF_NANOSTACK_CONFIGURATION) && DEVICE_SPI && DEVICE_I2C && defined(MBED_CONF_RTOS_PRESENT)
 

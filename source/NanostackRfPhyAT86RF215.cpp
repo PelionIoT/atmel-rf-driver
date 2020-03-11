@@ -22,8 +22,8 @@
 #include "platform/arm_hal_interrupt.h"
 #include "platform/mbed_wait_api.h"
 #include "nanostack/platform/arm_hal_phy.h"
-#include "NanostackRfPhyAT86RF215.h"
 #include "NanostackRfPhyAtmel.h"
+#include "AT86RF215Reg.h"
 #include "mbed_trace.h"
 #include "common_functions.h"
 #include <Timer.h>
