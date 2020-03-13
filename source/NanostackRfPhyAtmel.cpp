@@ -250,23 +250,12 @@ static void rf_if_irq_task_process_irq();
 
 RFBits::RFBits(PinName spi_mosi, PinName spi_miso,
                PinName spi_sclk, PinName spi_cs,
-               PinName spi_rst, PinName spi_slp, PinName spi_irq
-#ifdef TEST_GPIOS_ENABLED
-               , PinName spi_test1, PinName spi_test2, PinName spi_test3, PinName spi_test4, PinName spi_test5
-#endif //TEST_GPIOS_ENABLED
-               )
+               PinName spi_rst, PinName spi_slp, PinName spi_irq)
     :   spi(spi_mosi, spi_miso, spi_sclk),
         CS(spi_cs),
         RST(spi_rst),
         SLP_TR(spi_slp),
         IRQ(spi_irq)
-#ifdef TEST_GPIOS_ENABLED
-        ,TEST1(spi_test1),
-        TEST2(spi_test2),
-        TEST3(spi_test3),
-        TEST4(spi_test4),
-        TEST5(spi_test5)
-#endif //TEST_GPIOS_ENABLED
 #ifdef MBED_CONF_RTOS_PRESENT
     , irq_thread(osPriorityRealtime, MBED_CONF_ATMEL_RF_IRQ_THREAD_STACK_SIZE, NULL, "atmel_irq_thread"),
     irq_thread_215(osPriorityRealtime, MBED_CONF_ATMEL_RF_IRQ_THREAD_STACK_SIZE, NULL, "atmel_215_irq_thread")
@@ -277,7 +266,17 @@ RFBits::RFBits(PinName spi_mosi, PinName spi_miso,
 #endif
 }
 
+TestPins::TestPins(PinName test_pin_1, PinName test_pin_2, PinName test_pin_3, PinName test_pin_4, PinName test_pin_5)
+    :   TEST1(test_pin_1),
+        TEST2(test_pin_2),
+        TEST3(test_pin_3),
+        TEST4(test_pin_4),
+        TEST5(test_pin_5)
+{
+}
+
 static RFBits *rf;
+static TestPins *test_pins;
 static uint8_t rf_part_num = 0;
 /*TODO: RSSI Base value setting*/
 static int8_t rf_rssi_base_val = -91;
@@ -1520,6 +1519,7 @@ static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_h
         rf_tx_length = data_length;
         /*Start CCA timeout*/
         rf_cca_timer_start(RF_CCA_BASE_BACKOFF + randLIB_get_random_in_range(0, RF_CCA_RANDOM_BACKOFF));
+        TEST_CSMA_STARTED
         /*Store TX handle*/
         mac_tx_handle = tx_handle;
         rf_if_unlock();
@@ -1538,6 +1538,7 @@ static int8_t rf_start_cca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_h
  */
 static void rf_cca_abort(void)
 {
+    TEST_CSMA_DONE
     rf_cca_timer_stop();
     rf_flags_clear(RFF_CCA);
 }
@@ -1851,6 +1852,7 @@ static void rf_handle_tx_end(rf_trx_states_t trx_status)
  */
 static void rf_handle_cca_ed_done(uint8_t full_trx_status)
 {
+    TEST_CSMA_DONE
     if (!rf_flags_check(RFF_CCA)) {
         return;
     }
@@ -2165,23 +2167,15 @@ static uint8_t rf_scale_lqi(int8_t rssi)
 
 NanostackRfPhyAtmel::NanostackRfPhyAtmel(PinName spi_mosi, PinName spi_miso,
                                          PinName spi_sclk, PinName spi_cs,  PinName spi_rst, PinName spi_slp, PinName spi_irq,
-                                         PinName i2c_sda, PinName i2c_scl
-#ifdef TEST_GPIOS_ENABLED
-                                         ,PinName spi_test1, PinName spi_test2, PinName spi_test3, PinName spi_test4, PinName spi_test5
-#endif //TEST_GPIOS_ENABLED
-                                       )
-    : _mac(i2c_sda, i2c_scl), _mac_addr(), _rf(NULL), _mac_set(false),
+                                         PinName i2c_sda, PinName i2c_scl)
+    : _mac(i2c_sda, i2c_scl), _mac_addr(), _rf(NULL), _test_pins(NULL), _mac_set(false),
       _spi_mosi(spi_mosi), _spi_miso(spi_miso), _spi_sclk(spi_sclk),
       _spi_cs(spi_cs), _spi_rst(spi_rst), _spi_slp(spi_slp), _spi_irq(spi_irq)
-#ifdef TEST_GPIOS_ENABLED
-      ,_spi_test1(spi_test1), _spi_test2(spi_test2), _spi_test3(spi_test3), _spi_test4(spi_test4), _spi_test5(spi_test5)
-#endif //TEST_GPIOS_ENABLED
 {
-    _rf = new RFBits(_spi_mosi, _spi_miso, _spi_sclk, _spi_cs, _spi_rst, _spi_slp, _spi_irq
+    _rf = new RFBits(_spi_mosi, _spi_miso, _spi_sclk, _spi_cs, _spi_rst, _spi_slp, _spi_irq);
 #ifdef TEST_GPIOS_ENABLED
-                     ,_spi_test1, _spi_test2, _spi_test3, _spi_test4, _spi_test5
-#endif //TEST_GPIOS_ENABLED
-                     );
+    _test_pins = new TestPins(TEST_PIN_TX, TEST_PIN_RX, TEST_PIN_CSMA, TEST_PIN_SPARE_1, TEST_PIN_SPARE_2);
+#endif
 }
 
 NanostackRfPhyAtmel::~NanostackRfPhyAtmel()
@@ -2205,6 +2199,7 @@ int8_t NanostackRfPhyAtmel::rf_register()
 
     // Read the mac address if it hasn't been set by a user
     rf = _rf;
+    test_pins = _test_pins;
     if (!_mac_set) {
         int ret = _mac.read_eui64((void *)_mac_addr);
         if (ret < 0) {
@@ -2219,7 +2214,7 @@ int8_t NanostackRfPhyAtmel::rf_register()
     int8_t radio_id = -1;
     if (rf_part_num != PART_AT86RF231 && rf_part_num != PART_AT86RF233 && rf_part_num != PART_AT86RF212) {
         // Register RF type 215. Jumps to AT86RF215 driver.
-        radio_id = rf->init_215_driver(_rf, _mac_addr, &rf_part_num);
+        radio_id = rf->init_215_driver(_rf, _test_pins, _mac_addr, &rf_part_num);
     } else {
         // Register other RF types.
         radio_id = rf_device_register(_mac_addr);
@@ -2283,11 +2278,7 @@ void NanostackRfPhyAtmel::set_mac_address(uint8_t *mac)
 NanostackRfPhy &NanostackRfPhy::get_default_instance()
 {
     static NanostackRfPhyAtmel rf_phy(ATMEL_SPI_MOSI, ATMEL_SPI_MISO, ATMEL_SPI_SCLK, ATMEL_SPI_CS,
-                                      ATMEL_SPI_RST, ATMEL_SPI_SLP, ATMEL_SPI_IRQ, ATMEL_I2C_SDA, ATMEL_I2C_SCL
-#ifdef TEST_GPIOS_ENABLED
-                                      , ATMEL_TEST1, ATMEL_SPI_TEST2, ATMEL_SPI_TEST3, ATMEL_SPI_TEST4, ATMEL_SPI_TEST5
-#endif //TEST_GPIOS_ENABLED
-                          );
+                                      ATMEL_SPI_RST, ATMEL_SPI_SLP, ATMEL_SPI_IRQ, ATMEL_I2C_SDA, ATMEL_I2C_SCL);
     return rf_phy;
 }
 
