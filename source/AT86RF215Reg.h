@@ -73,6 +73,7 @@ extern "C" {
 #define BBC_FSKC0                   0x60
 #define BBC_FSKC1                   0x61
 #define BBC_FSKC2                   0x62
+#define BBC_FSKC3                   0x63
 #define BBC0_FBRXS                  0x2000
 #define BBC0_FBTXS                  0x2800
 #define BBC1_FBRXS                  0x3000
