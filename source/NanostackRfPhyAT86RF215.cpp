@@ -155,6 +155,7 @@ using namespace rtos;
 
 #include "rfbits.h"
 static RFBits *rf;
+static TestPins *test_pins;
 
 #define MAC_FRAME_TYPE_MASK     0x07
 #define MAC_TYPE_ACK            (2)
@@ -327,22 +328,21 @@ static int8_t rf_interface_state_control(phy_interface_state_e new_state, uint8_
 #ifdef TEST_GPIOS_ENABLED
 static void test1_toggle(void)
 {
-    if (rf->TEST4) {
-        rf->TEST4 = 0;
+    if (test_pins->TEST4) {
+        test_pins->TEST4 = 0;
     } else {
-        rf->TEST4 = 1;
+        test_pins->TEST4 = 1;
     }
 }
 static void test2_toggle(void)
 {
-    if (rf->TEST5) {
-        rf->TEST5 = 0;
+    if (test_pins->TEST5) {
+        test_pins->TEST5 = 0;
     } else {
-        rf->TEST5 = 1;
+        test_pins->TEST5 = 1;
     }
 }
 #endif //TEST_GPIOS_ENABLED
-
 
 static void rf_init(void)
 {
@@ -474,18 +474,21 @@ static int8_t rf_start_csma_ca(uint8_t *data_ptr, uint16_t data_length, uint8_t 
         // Max. time to TX can be 65ms, otherwise time has passed already -> send immediately
         if (backoff_time <= 65000) {
             rf->cca_timer.attach_us(rf_csma_ca_timer_signal, backoff_time);
+            TEST_CSMA_STARTED
             rf_unlock();
             return 0;
         }
     }
     // Short timeout to start CCA immediately.
     rf->cca_timer.attach_us(rf_csma_ca_timer_signal, 1);
+    TEST_CSMA_STARTED
     rf_unlock();
     return 0;
 }
 
 static void rf_handle_cca_ed_done(void)
 {
+    TEST_CSMA_DONE
     rf_irq_rf_disable(EDC, RF_09);
     rf_irq_rf_disable(EDC, rf_module);
     if (rf_state == RF_CSMA_WHILE_RX) {
@@ -1023,9 +1026,10 @@ void RFBits::rf_irq_task(void)
     }
 }
 
-int RFBits::init_215_driver(RFBits *_rf, const uint8_t mac[8], uint8_t *rf_part_num)
+int RFBits::init_215_driver(RFBits *_rf, TestPins *_test_pins, const uint8_t mac[8], uint8_t *rf_part_num)
 {
     rf = _rf;
+    test_pins = _test_pins;
     irq_thread_215.start(mbed::callback(this, &RFBits::rf_irq_task));
     *rf_part_num = rf_read_common_register(RF_PN);
     return rf_device_register(mac);

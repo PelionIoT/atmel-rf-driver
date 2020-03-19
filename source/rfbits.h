@@ -40,28 +40,17 @@ class RFBits {
 public:
     RFBits(PinName spi_mosi, PinName spi_miso,
            PinName spi_sclk, PinName spi_cs,
-           PinName spi_rst, PinName spi_slp, PinName spi_irq
-#ifdef TEST_GPIOS_ENABLED
-           , PinName spi_test1, PinName spi_test2, PinName spi_test3, PinName spi_test4, PinName spi_test5
-#endif //TEST_GPIOS_ENABLED
-           );
+           PinName spi_rst, PinName spi_slp, PinName spi_irq);
     UnlockedSPI spi;
     DigitalOut CS;
     DigitalOut RST;
     DigitalOut SLP_TR;
     InterruptIn IRQ;
-#ifdef TEST_GPIOS_ENABLED
-    DigitalOut TEST1;
-    DigitalOut TEST2;
-    DigitalOut TEST3;
-    DigitalOut TEST4;
-    DigitalOut TEST5;
-#endif //TEST_GPIOS_ENABLED
     Timeout ack_timer;
     Timeout cal_timer;
     Timeout cca_timer;
     Timer tx_timer;
-    int init_215_driver(RFBits *_rf, const uint8_t mac[8], uint8_t *rf_part_num);
+    int init_215_driver(RFBits *_rf, TestPins *_test_pins, const uint8_t mac[8], uint8_t *rf_part_num);
 #ifdef MBED_CONF_RTOS_PRESENT
     Thread irq_thread;
     Thread irq_thread_215;
@@ -69,6 +58,16 @@ public:
     void rf_if_irq_task();
     void rf_irq_task();
 #endif
+};
+
+class TestPins {
+public:
+    TestPins(PinName test_pin_1, PinName test_pin_2, PinName test_pin_3, PinName test_pin_4, PinName test_pin_5);
+    DigitalOut TEST1;
+    DigitalOut TEST2;
+    DigitalOut TEST3;
+    DigitalOut TEST4;
+    DigitalOut TEST5;
 };
 
 #endif /* RFBITS_H_ */
