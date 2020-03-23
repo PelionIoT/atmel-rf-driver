@@ -408,13 +408,12 @@ static void rf_init_registers(rf_modules_e module)
         rf_write_bbc_register_field(BBC_AMCS, module, AACK, 0);
         // Disable address filter unit 0
         rf_write_bbc_register_field(BBC_AFC0, module, AFEN0, 0);
-
+        // Set bandwidth time product
         rf_write_bbc_register_field(BBC_FSKC0, module, BT, BT_20);
-
+        // Disable interleaving
         rf_write_bbc_register_field(BBC_FSKC2, module, FECIE, 0);
-
+        // Disable receiver override
         rf_write_bbc_register_field(BBC_FSKC2, module, RXO, RXO_DIS);
-
         // Set modulation index
         if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
             rf_write_bbc_register_field(BBC_FSKC0, module, MIDX, MIDX_05);
