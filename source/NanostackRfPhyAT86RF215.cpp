@@ -111,6 +111,7 @@ static void rf_conf_set_cca_threshold(uint8_t percent);
 
 static int8_t rf_radio_driver_id = -1;
 static phy_device_driver_s device_driver;
+static uint8_t rf_version_num = 0;
 static rf_modules_e rf_module = RF_24;
 static uint8_t mac_tx_handle = 0;
 static rf_states_e rf_state = RF_IDLE;
@@ -407,6 +408,12 @@ static void rf_init_registers(rf_modules_e module)
         rf_write_bbc_register_field(BBC_AMCS, module, AACK, 0);
         // Disable address filter unit 0
         rf_write_bbc_register_field(BBC_AFC0, module, AFEN0, 0);
+        // Set bandwidth time product
+        rf_write_bbc_register_field(BBC_FSKC0, module, BT, BT_20);
+        // Disable interleaving
+        rf_write_bbc_register_field(BBC_FSKC2, module, FECIE, 0);
+        // Disable receiver override
+        rf_write_bbc_register_field(BBC_FSKC2, module, RXO, RXO_DIS);
         // Set modulation index
         if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
             rf_write_bbc_register_field(BBC_FSKC0, module, MIDX, MIDX_05);
@@ -416,15 +423,21 @@ static void rf_init_registers(rf_modules_e module)
             rf_write_rf_register_field(RF_TXDFE, module, RCUT, RCUT_4);
         }
         // Set Gain control settings
-        rf_write_rf_register_field(RF_AGCS, module, AVGS, AVGS_8_SAMPLES);
+        rf_write_rf_register_field(RF_AGCC, module, AVGS, AVGS_8_SAMPLES);
         rf_write_rf_register_field(RF_AGCS, module, TGT, TGT_1);
         // Set symbol rate and related configurations
         rf_set_fsk_symbol_rate_configuration(phy_current_config.datarate, module);
+        // Set preamble length
+        uint8_t preamble_len = 24;
+        if (phy_current_config.datarate < 150000) {
+            preamble_len = 8;
+        } else if (phy_current_config.datarate < 300000) {
+            preamble_len = 12;
+        }
+        rf_write_bbc_register(BBC_FSKPLL, module, preamble_len);
     }
     // Disable filtering FCS
     rf_write_bbc_register_field(BBC_PC, module, FCSFE, 0);
-    // Enable using unfiltered signal in AGC
-    rf_write_rf_register_field(RF_AGCC, module, AGCI, AGCI);
     // Set channel spacing
     rf_set_channel_spacing(phy_current_config.channel_spacing, module);
     // Set channel 0 center frequency
@@ -516,6 +529,7 @@ static void rf_handle_cca_ed_done(void)
                 backoff_time = 1;
             }
             rf->cca_timer.attach_us(rf_csma_ca_timer_signal, backoff_time);
+            TEST_CSMA_STARTED
         }
         return;
     }
@@ -900,7 +914,11 @@ static int rf_set_fsk_symbol_rate_configuration(uint32_t symbol_rate, rf_modules
 {
     if (symbol_rate == 50000) {
         rf_write_bbc_register_field(BBC_FSKC1, module, SRATE, SRATE_50KHZ);
-        rf_write_rf_register_field(RF_TXDFE, module, SR, SR_10);
+        if (rf_version_num == 1) {
+            rf_write_rf_register_field(RF_TXDFE, module, SR, SR_10);
+        } else {
+            rf_write_rf_register_field(RF_TXDFE, module, SR, SR_8);
+        }
         rf_write_rf_register_field(RF_RXDFE, module, SR, SR_10);
         if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
             rf_write_rf_register_field(RF_RXDFE, module, RCUT, RCUT_0);
@@ -913,7 +931,11 @@ static int rf_set_fsk_symbol_rate_configuration(uint32_t symbol_rate, rf_modules
         rf_write_rf_register_field(RF_RXBWC, module, IFS, 0);
     } else if (symbol_rate == 100000) {
         rf_write_bbc_register_field(BBC_FSKC1, module, SRATE, SRATE_100KHZ);
-        rf_write_rf_register_field(RF_TXDFE, module, SR, SR_5);
+        if (rf_version_num == 1) {
+            rf_write_rf_register_field(RF_TXDFE, module, SR, SR_5);
+        } else {
+            rf_write_rf_register_field(RF_TXDFE, module, SR, SR_4);
+        }
         rf_write_rf_register_field(RF_RXDFE, module, SR, SR_5);
         rf_write_rf_register_field(RF_TXCUTC, module, PARAMP, RF_PARAMP16U);
         if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
@@ -1032,6 +1054,8 @@ int RFBits::init_215_driver(RFBits *_rf, TestPins *_test_pins, const uint8_t mac
     test_pins = _test_pins;
     irq_thread_215.start(mbed::callback(this, &RFBits::rf_irq_task));
     *rf_part_num = rf_read_common_register(RF_PN);
+    rf_version_num = rf_read_common_register(RF_VN);
+    tr_info("RF version number: %x", rf_version_num);
     return rf_device_register(mac);
 }
 

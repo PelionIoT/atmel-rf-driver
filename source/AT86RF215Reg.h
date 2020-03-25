@@ -73,6 +73,10 @@ extern "C" {
 #define BBC_FSKC0                   0x60
 #define BBC_FSKC1                   0x61
 #define BBC_FSKC2                   0x62
+#define BBC_FSKC3                   0x63
+#define BBC_FSKPLL                  0x65
+#define BBC_FSKPHRTX                0x6A
+#define BBC_FSKPHRRX                0x6B
 #define BBC0_FBRXS                  0x2000
 #define BBC0_FBTXS                  0x2800
 #define BBC1_FBRXS                  0x3000
@@ -141,9 +145,16 @@ extern "C" {
 #define SR_1                        (1 << 0)
 
 // BBC_FSKC0
+#define BT                          0xC0
+#define BT_20                       (3 << 6)
+#define BT_10                       (1 << 6)
+#define MIDXS                       0x30
+#define MIDXS_0                     (0 << 4)
 #define MIDX                        0x0E
 #define MIDX_10                     (3 << 1)
+#define MIDX_075                    (2 << 1)
 #define MIDX_05                     (1 << 1)
+#define MIDX_0375                   (0 << 1)
 
 // BBC_FSKC1
 #define SRATE                       0x0F
@@ -155,6 +166,8 @@ extern "C" {
 #define SRATE_50KHZ                 (0 << 0)
 
 // BBC_FSKC2
+#define RXO                         0x60
+#define RXO_DIS                     (0 << 5)
 #define FECIE                       (1 << 0)
 
 // BBC_AFFTM
