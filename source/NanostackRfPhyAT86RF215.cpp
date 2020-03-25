@@ -112,6 +112,7 @@ static void rf_conf_set_cca_threshold(uint8_t percent);
 static int8_t rf_radio_driver_id = -1;
 static phy_device_driver_s device_driver;
 static rf_modules_e rf_module = RF_24;
+static phy_802_15_4_mode_t mac_mode = IEEE_802_15_4_2011;
 static uint8_t mac_tx_handle = 0;
 static rf_states_e rf_state = RF_IDLE;
 static uint8_t rx_buffer[RF_MTU_15_4G_2012];
@@ -287,11 +288,6 @@ static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_pt
         case PHY_EXTENSION_SET_RF_CONFIGURATION:
             memcpy(&phy_current_config, data_ptr, sizeof(phy_rf_channel_configuration_s));
             rf_calculate_symbol_rate(phy_current_config.datarate, phy_current_config.modulation);
-            if (phy_current_config.channel_0_center_frequency < 1000000000) {
-                rf_module = RF_09;
-            } else {
-                rf_module = RF_24;
-            }
             rf_update_config = true;
             if (rf_state == RF_IDLE) {
                 rf_receive(rf_rx_channel, rf_module);
@@ -299,6 +295,14 @@ static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_pt
             break;
         case PHY_EXTENSION_SET_CCA_THRESHOLD:
             rf_conf_set_cca_threshold(*data_ptr);
+            break;
+        case PHY_EXTENSION_SET_802_15_4_MODE:
+            mac_mode = (phy_802_15_4_mode_t) *data_ptr;
+            if (mac_mode == IEEE_802_15_4_2011) {
+                rf_module = RF_24;
+            } else if (mac_mode == IEEE_802_15_4G_2012) {
+                rf_module = RF_09;
+            }
             break;
         default:
             break;
@@ -371,9 +375,7 @@ static void rf_init_registers(rf_modules_e module)
 {
     // O-QPSK configuration using IEEE Std 802.15.4-2011
     // FSK configuration using IEEE Std 802.15.4g-2012
-    if (phy_current_config.modulation == M_OQPSK) {
-        rf_module = RF_24;
-        device_driver.phy_MTU = RF_MTU_15_4_2011;
+    if (mac_mode == IEEE_802_15_4_2011) {
         device_driver.link_type = PHY_LINK_15_4_2_4GHZ_TYPE;
         // 16-bit FCS
         rf_write_bbc_register_field(BBC_PC, module, FCST, FCST);
@@ -397,9 +399,7 @@ static void rf_init_registers(rf_modules_e module)
         rf_write_bbc_register_field(BBC_AFC0, module, AFEN0, AFEN0);
         // Allow Ack frame type with address filter
         rf_write_bbc_register_field(BBC_AFFTM, module, TYPE_2, TYPE_2);
-    } else if (phy_current_config.modulation == M_2FSK) {
-        rf_module = RF_09;
-        device_driver.phy_MTU = RF_MTU_15_4G_2012;
+    } else if (mac_mode == IEEE_802_15_4G_2012) {
         device_driver.link_type = PHY_LINK_15_4_SUBGHZ_TYPE;
         // Enable FSK
         rf_write_bbc_register_field(BBC_PC, module, PT, BB_MRFSK);
