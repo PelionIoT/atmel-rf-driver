@@ -116,10 +116,12 @@ static rf_modules_e rf_module = RF_24;
 static phy_802_15_4_mode_t mac_mode = IEEE_802_15_4_2011;
 static uint8_t mac_tx_handle = 0;
 static rf_states_e rf_state = RF_IDLE;
+static bool receiver_enabled = false;
 static uint8_t rx_buffer[RF_MTU_15_4G_2012];
 static uint8_t rf_rx_channel;
 static uint8_t rf_new_channel;
 static uint16_t tx_sequence = 0xffff;
+static uint16_t cur_packet_len = 0xffff;
 static uint32_t tx_time = 0;
 static uint32_t rx_time = 0;
 static uint8_t rf09_irq_mask = 0;
@@ -268,6 +270,7 @@ static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_pt
         case PHY_EXTENSION_SET_CSMA_PARAMETERS:
             csma_params = (phy_csma_params_t *)data_ptr;
             if (csma_params->backoff_time == 0) {
+                TEST_CSMA_DONE
                 rf->cca_timer.detach();
                 if (rf_state == RF_TX_STARTED) {
                     rf_state = RF_IDLE;
@@ -554,6 +557,7 @@ static void rf_handle_tx_done(void)
 
 static void rf_start_tx(void)
 {
+    receiver_enabled = false;
     rf_change_state(RF_TXPREP, rf_module);
     rf_irq_bbc_enable(TXFE, rf_module);
     rf_change_state(RF_TX, rf_module);
@@ -580,6 +584,7 @@ static void rf_handle_ack(uint8_t seq_number, uint8_t pending)
 
 static void rf_handle_rx_done(void)
 {
+    receiver_enabled = false;
     TEST_RX_DONE
     rf_backup_timer_stop();
     if (rf_state == RF_CSMA_WHILE_RX) {
@@ -613,8 +618,9 @@ static void rf_handle_rx_done(void)
         if (device_driver.phy_rf_statistics) {
             device_driver.phy_rf_statistics->crc_fails++;
         }
+        device_driver.phy_rx_cb(NULL, 0, 0, 0, rf_radio_driver_id);
     }
-    rf_receive(rf_new_channel, rf_module);
+    rf_receive(rf_rx_channel, rf_module);
 }
 
 static void rf_handle_rx_start(void)
@@ -632,6 +638,9 @@ static void rf_handle_rx_start(void)
 
 static void rf_receive(uint16_t rx_channel, rf_modules_e module)
 {
+    if ((receiver_enabled == true) && (rf_update_config == false) && (rx_channel == rf_rx_channel)) {
+        return;
+    }
     TEST_RX_DONE
     rf_lock();
     if (rf_update_config == true) {
@@ -648,6 +657,7 @@ static void rf_receive(uint16_t rx_channel, rf_modules_e module)
     rf_change_state(RF_RX, module);
     rf_irq_bbc_enable(RXFS, module);
     rf_irq_bbc_enable(RXFE, module);
+    receiver_enabled = true;
     rf_unlock();
 }
 
@@ -702,8 +712,13 @@ static void rf_write_tx_packet_length(uint16_t packet_length, rf_modules_e modul
     if (packet_length > device_driver.phy_MTU) {
         return;
     }
-    rf_write_bbc_register(BBC_TXFLH, module, (uint8_t) (packet_length >> 8));
-    rf_write_bbc_register(BBC_TXFLL, module, (uint8_t) packet_length);
+    if ((uint8_t)(cur_packet_len >> 8) != (packet_length / 256)) {
+        rf_write_bbc_register(BBC_TXFLH, module, packet_length / 256);
+    }
+    if ((uint8_t)cur_packet_len != (packet_length % 256)) {
+        rf_write_bbc_register(BBC_TXFLL, module, packet_length % 256);
+    }
+    cur_packet_len = packet_length;
 }
 
 static uint16_t rf_read_rx_frame_length(rf_modules_e module)
@@ -842,6 +857,7 @@ static void rf_write_rf_register_field(uint8_t addr, rf_modules_e module, uint8_
 
 static void rf_backup_timer_interrupt(void)
 {
+    receiver_enabled = false;
     rf_read_common_register(RF09_IRQS);
     rf_read_common_register(RF24_IRQS);
     rf_read_common_register(BBC0_IRQS);
