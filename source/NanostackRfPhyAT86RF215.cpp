@@ -1069,6 +1069,7 @@ int RFBits::init_215_driver(RFBits *_rf, TestPins *_test_pins, const uint8_t mac
     rf = _rf;
     test_pins = _test_pins;
     irq_thread_215.start(mbed::callback(this, &RFBits::rf_irq_task));
+    rf->spi.frequency(25000000);
     *rf_part_num = rf_read_common_register(RF_PN);
     rf_version_num = rf_read_common_register(RF_VN);
     tr_info("RF version number: %x", rf_version_num);
