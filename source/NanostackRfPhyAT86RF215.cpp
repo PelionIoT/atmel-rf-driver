@@ -620,7 +620,7 @@ static void rf_handle_rx_done(void)
                 device_driver.phy_rx_cb(rx_buffer, cur_rx_packet_len, 0xf0, rssi, rf_radio_driver_id);
                 // If auto ack used, must wait until RF returns to RF_TXPREP state
                 if ((version != MAC_FRAME_VERSION_2) && (rx_buffer[0] & FC_AR)) {
-                    wait_us(50);
+                    wait_us(100);
                     rf_poll_state_change(RF_TXPREP, rf_module);
                 }
             }
