@@ -170,6 +170,11 @@ extern "C" {
 #define RXO_DIS                     (0 << 5)
 #define FECIE                       (1 << 0)
 
+// BBC_FSKC3
+#define SFDT                        0xF0
+#define PDT                         0x0F
+#define PDT_6                       (6 << 0)
+
 // BBC_AFFTM
 #define TYPE_2                      (1 << 2)
 
@@ -207,6 +212,7 @@ extern "C" {
 #define RXFS                        (1 << 0)
 
 //BBC_PC
+#define BBEN                        (1 << 2)
 #define PT                          0x03
 #define BB_PHYOFF                   (0 << 0)
 #define BB_MRFSK                    (1 << 0)
