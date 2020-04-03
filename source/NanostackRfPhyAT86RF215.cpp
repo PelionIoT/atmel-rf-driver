@@ -141,12 +141,14 @@ static const phy_rf_channel_configuration_s phy_24ghz = {.channel_0_center_frequ
                                                          .channel_spacing = 5000000U,
                                                          .datarate = 250000U,
                                                          .number_of_channels = 16U,
-                                                         .modulation = M_OQPSK};
+                                                         .modulation = M_OQPSK
+                                                        };
 static const phy_rf_channel_configuration_s phy_subghz = {.channel_0_center_frequency = 868300000U,
                                                           .channel_spacing = 2000000U,
                                                           .datarate = 250000U,
                                                           .number_of_channels = 11U,
-                                                          .modulation = M_OQPSK};
+                                                          .modulation = M_OQPSK
+                                                         };
 
 static phy_rf_channel_configuration_s phy_current_config;
 
@@ -299,7 +301,7 @@ static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_pt
             rf_conf_set_cca_threshold(*data_ptr);
             break;
         case PHY_EXTENSION_SET_802_15_4_MODE:
-            mac_mode = (phy_802_15_4_mode_t) *data_ptr;
+            mac_mode = (phy_802_15_4_mode_t) *data_ptr; // *NOPAD*
             if (mac_mode == IEEE_802_15_4_2011) {
                 rf_module = RF_24;
             } else if (mac_mode == IEEE_802_15_4G_2012) {
@@ -577,7 +579,7 @@ static void rf_handle_ack(uint8_t seq_number, uint8_t pending)
 {
     phy_link_tx_status_e phy_status;
     if (tx_sequence == (uint16_t)seq_number) {
-         if (pending) {
+        if (pending) {
             phy_status = PHY_LINK_TX_DONE_PENDING;
         } else {
             phy_status = PHY_LINK_TX_DONE;
@@ -915,7 +917,7 @@ static void rf_backup_timer_stop(void)
 static uint32_t rf_backup_timer_start(uint16_t bytes, uint32_t time_us)
 {
     if (!time_us) {
-        time_us = (uint32_t)(8000000/phy_current_config.datarate)*bytes + PACKET_PROCESSING_TIME;
+        time_us = (uint32_t)(8000000 / phy_current_config.datarate) * bytes + PACKET_PROCESSING_TIME;
     }
     // Using cal_timer as backup timer
     rf->cal_timer.attach_us(rf_backup_timer_signal, time_us);
@@ -926,7 +928,7 @@ static uint32_t rf_backup_timer_start(uint16_t bytes, uint32_t time_us)
 static int rf_set_channel(uint16_t channel, rf_modules_e module)
 {
     rf_write_rf_register(RF_CNL, module, (uint8_t) channel);
-    rf_write_rf_register_field(RF_CNM, module, CNH, (uint8_t) (channel >> 8));
+    rf_write_rf_register_field(RF_CNM, module, CNH, (uint8_t)(channel >> 8));
     return 0;
 }
 
@@ -1055,7 +1057,7 @@ static int rf_set_fsk_symbol_rate_configuration(uint32_t symbol_rate, rf_modules
 
 static void rf_conf_set_cca_threshold(uint8_t percent)
 {
-    uint8_t step = (MAX_CCA_THRESHOLD-MIN_CCA_THRESHOLD);
+    uint8_t step = (MAX_CCA_THRESHOLD - MIN_CCA_THRESHOLD);
     cca_threshold = MIN_CCA_THRESHOLD + (step * percent) / 100;
 }
 
