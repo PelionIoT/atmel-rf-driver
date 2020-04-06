@@ -507,6 +507,7 @@ static int8_t rf_start_csma_ca(uint8_t *data_ptr, uint16_t data_length, uint8_t 
         tx_sequence = *(data_ptr + 2);
     }
     rf_write_tx_buffer(data_ptr, data_length, rf_module);
+    // Add CRC bytes
     if (mac_mode == IEEE_802_15_4_2011) {
         data_length += 2;
     } else {
@@ -633,6 +634,7 @@ static void rf_handle_rx_done(void)
                 rf_handle_ack(rx_buffer[2], rx_buffer[0] & MAC_DATA_PENDING);
             } else {
                 int8_t rssi = (int8_t) rf_read_rf_register(RF_EDV, rf_module);
+                // Cut CRC bytes
                 if (mac_mode == IEEE_802_15_4_2011) {
                     cur_rx_packet_len -= 2;
                 } else {
@@ -1079,10 +1081,8 @@ static int rf_configure_by_ofdm_bandwidth_option(uint8_t option, uint32_t data_r
     if (!option || option > 4) {
         return -1;
     }
-    uint32_t datarate_tmp = 100000;
-    for (int i=0; i<option-1; i++) {
-        datarate_tmp >>= 1;
-    }
+    uint32_t datarate_tmp = 100000 >> (option - 1);
+
     // Set modulation and coding scheme
     if (data_rate == datarate_tmp) {
         rf_write_bbc_register_field(BBC_OFDMPHRTX, module, MCS, MCS_0);
