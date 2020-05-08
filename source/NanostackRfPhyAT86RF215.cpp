@@ -301,6 +301,9 @@ static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_pt
         case PHY_EXTENSION_SET_CCA_THRESHOLD:
             rf_conf_set_cca_threshold(*data_ptr);
             break;
+        case PHY_EXTENSION_SET_CHANNEL_CCA_THRESHOLD:
+            cca_threshold = (int8_t) *data_ptr; // *NOPAD*
+            break;
         case PHY_EXTENSION_SET_802_15_4_MODE:
             mac_mode = (phy_802_15_4_mode_t) *data_ptr; // *NOPAD*
             if (mac_mode == IEEE_802_15_4_2011) {
