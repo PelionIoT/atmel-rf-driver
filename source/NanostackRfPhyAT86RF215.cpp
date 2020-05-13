@@ -165,6 +165,7 @@ using namespace rtos;
 #include "rfbits.h"
 static RFBits *rf;
 static TestPins *test_pins;
+static Se2435Pins *se2435_pa_pins;
 
 #define MAC_FRAME_TYPE_MASK     0x07
 #define MAC_TYPE_ACK            (2)
@@ -464,6 +465,10 @@ static void rf_init_registers(rf_modules_e module)
             rf_write_rf_register_field(RF_AGCS, module, TGT, TGT_3);
         }
     }
+#if defined(SE2435L_PA)
+    se2435_pa_pins->CSD = 1;
+    rf_write_rf_register_field(RF_PADFE, module, PADFE, RF_FEMODE3);
+#endif
     // Disable filtering FCS
     rf_write_bbc_register_field(BBC_PC, module, FCSFE, 0);
     // Set channel spacing
@@ -1183,10 +1188,11 @@ void RFBits::rf_irq_task(void)
     }
 }
 
-int RFBits::init_215_driver(RFBits *_rf, TestPins *_test_pins, const uint8_t mac[8], uint8_t *rf_part_num)
+int RFBits::init_215_driver(RFBits *_rf, TestPins *_test_pins, Se2435Pins *_se2435_pa_pins, const uint8_t mac[8], uint8_t *rf_part_num)
 {
     rf = _rf;
     test_pins = _test_pins;
+    se2435_pa_pins = _se2435_pa_pins;
     irq_thread_215.start(mbed::callback(this, &RFBits::rf_irq_task));
     rf->spi.frequency(25000000);
     *rf_part_num = rf_read_common_register(RF_PN);
