@@ -23,6 +23,7 @@
 #include "platform/mbed_wait_api.h"
 #include "nanostack/platform/arm_hal_phy.h"
 #include "NanostackRfPhyAtmel.h"
+#include "AT86RFReg.h"
 #include "AT86RF215Reg.h"
 #include "mbed_trace.h"
 #include "common_functions.h"
@@ -1195,7 +1196,13 @@ int RFBits::init_215_driver(RFBits *_rf, TestPins *_test_pins, Se2435Pins *_se24
     se2435_pa_pins = _se2435_pa_pins;
     irq_thread_215.start(mbed::callback(this, &RFBits::rf_irq_task));
     rf->spi.frequency(25000000);
+#if !defined(HAVE_AT86RF215M)
     *rf_part_num = rf_read_common_register(RF_PN);
+#else
+    *rf_part_num = PART_AT86RF215M;
+    rf_module = RF_09;
+    mac_mode = IEEE_802_15_4G_2012;
+#endif
     rf_version_num = rf_read_common_register(RF_VN);
     tr_info("RF version number: %x", rf_version_num);
     return rf_device_register(mac);
