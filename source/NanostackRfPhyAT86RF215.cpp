@@ -467,7 +467,11 @@ static void rf_init_registers(rf_modules_e module)
         }
     }
 #if defined(SE2435L_PA)
+    // Wakeup SE2435L
     se2435_pa_pins->CSD = 1;
+    // Antenna port selection: (0 - port 1, 1 - port 2)
+    se2435_pa_pins->ANT_SEL = 0;
+    // Enable external front end with configuration 3
     rf_write_rf_register_field(RF_PADFE, module, PADFE, RF_FEMODE3);
 #endif
     // Disable filtering FCS
@@ -1196,10 +1200,16 @@ int RFBits::init_215_driver(RFBits *_rf, TestPins *_test_pins, Se2435Pins *_se24
     se2435_pa_pins = _se2435_pa_pins;
     irq_thread_215.start(mbed::callback(this, &RFBits::rf_irq_task));
     rf->spi.frequency(25000000);
+    /* Atmel AT86RF215 Device Family datasheet:
+     * Errata #9: RF215M device has a wrong part number
+     * Description:
+     * The RF215M device part number is 0x34 instead of 0x36 (register RF_PN.PN).
+     */
 #if !defined(HAVE_AT86RF215M)
     *rf_part_num = rf_read_common_register(RF_PN);
 #else
     *rf_part_num = PART_AT86RF215M;
+    // AT86RF215M is Sub-GHz only transceiver. Change default settings.
     rf_module = RF_09;
     mac_mode = IEEE_802_15_4G_2012;
 #endif

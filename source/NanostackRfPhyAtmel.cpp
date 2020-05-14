@@ -2216,6 +2216,7 @@ int8_t NanostackRfPhyAtmel::rf_register()
     test_pins = _test_pins;
     se2435_pa_pins = _se2435_pa_pins;
     if (!_mac_set) {
+// Unless AT24MAC is available, using randomly generated MAC address
 #if !defined(DISABLE_AT24MAC)
         int ret = _mac.read_eui64((void *)_mac_addr);
         if (ret < 0) {
