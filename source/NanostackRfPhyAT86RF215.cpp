@@ -166,7 +166,7 @@ using namespace rtos;
 #include "rfbits.h"
 static RFBits *rf;
 static TestPins *test_pins;
-static Se2435Pins *se2435_pa_pins;
+static Se2435Pins *se2435_pa_pins = NULL;
 
 #define MAC_FRAME_TYPE_MASK     0x07
 #define MAC_TYPE_ACK            (2)
@@ -466,14 +466,14 @@ static void rf_init_registers(rf_modules_e module)
             rf_write_rf_register_field(RF_AGCS, module, TGT, TGT_3);
         }
     }
-#if defined(SE2435L_PA)
-    // Wakeup SE2435L
-    se2435_pa_pins->CSD = 1;
-    // Antenna port selection: (0 - port 1, 1 - port 2)
-    se2435_pa_pins->ANT_SEL = 0;
-    // Enable external front end with configuration 3
-    rf_write_rf_register_field(RF_PADFE, module, PADFE, RF_FEMODE3);
-#endif
+    if (se2435_pa_pins) {
+        // Wakeup SE2435L
+        se2435_pa_pins->CSD = 1;
+        // Antenna port selection: (0 - port 1, 1 - port 2)
+        se2435_pa_pins->ANT_SEL = 0;
+        // Enable external front end with configuration 3
+        rf_write_rf_register_field(RF_PADFE, module, PADFE, RF_FEMODE3);
+    }
     // Disable filtering FCS
     rf_write_bbc_register_field(BBC_PC, module, FCSFE, 0);
     // Set channel spacing
@@ -1193,11 +1193,10 @@ void RFBits::rf_irq_task(void)
     }
 }
 
-int RFBits::init_215_driver(RFBits *_rf, TestPins *_test_pins, Se2435Pins *_se2435_pa_pins, const uint8_t mac[8], uint8_t *rf_part_num)
+int RFBits::init_215_driver(RFBits *_rf, TestPins *_test_pins, const uint8_t mac[8], uint8_t *rf_part_num)
 {
     rf = _rf;
     test_pins = _test_pins;
-    se2435_pa_pins = _se2435_pa_pins;
     irq_thread_215.start(mbed::callback(this, &RFBits::rf_irq_task));
     rf->spi.frequency(25000000);
     /* Atmel AT86RF215 Device Family datasheet:
@@ -1216,6 +1215,12 @@ int RFBits::init_215_driver(RFBits *_rf, TestPins *_test_pins, Se2435Pins *_se24
     rf_version_num = rf_read_common_register(RF_VN);
     tr_info("RF version number: %x", rf_version_num);
     return rf_device_register(mac);
+}
+
+int RFBits::init_se2435_pa(Se2435Pins *_se2435_pa_pins)
+{
+    se2435_pa_pins = _se2435_pa_pins;
+    return 0;
 }
 
 #endif // MBED_CONF_NANOSTACK_CONFIGURATION && DEVICE_SPI && DEVICE_INTERRUPTIN && defined(MBED_CONF_RTOS_PRESENT)
