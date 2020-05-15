@@ -2236,8 +2236,9 @@ int8_t NanostackRfPhyAtmel::rf_register()
     rf_part_num = rf_if_read_part_num();
     int8_t radio_id = -1;
     if (rf_part_num != PART_AT86RF231 && rf_part_num != PART_AT86RF233 && rf_part_num != PART_AT86RF212) {
+        rf->init_se2435_pa(_se2435_pa_pins);
         // Register RF type 215. Jumps to AT86RF215 driver.
-        radio_id = rf->init_215_driver(_rf, _test_pins, _se2435_pa_pins, _mac_addr, &rf_part_num);
+        radio_id = rf->init_215_driver(_rf, _test_pins, _mac_addr, &rf_part_num);
     } else {
         // Register other RF types.
         radio_id = rf_device_register(_mac_addr);

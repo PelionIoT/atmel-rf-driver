@@ -50,7 +50,8 @@ public:
     Timeout cal_timer;
     Timeout cca_timer;
     Timer tx_timer;
-    int init_215_driver(RFBits *_rf, TestPins *_test_pins, Se2435Pins *_se2435_pa_pins, const uint8_t mac[8], uint8_t *rf_part_num);
+    int init_215_driver(RFBits *_rf, TestPins *_test_pins, const uint8_t mac[8], uint8_t *rf_part_num);
+    int init_se2435_pa(Se2435Pins *_se2435_pa_pins);
 #ifdef MBED_CONF_RTOS_PRESENT
     Thread irq_thread;
     Thread irq_thread_215;
