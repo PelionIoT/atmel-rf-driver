@@ -47,6 +47,7 @@ extern "C" {
 #define RF_EDV                      0x10
 #define RF_TXCUTC                   0x12
 #define RF_TXDFE                    0x13
+#define RF_PADFE                    0x16
 #define BBC_IRQM                    0x00
 #define BBC_PC                      0x01
 #define BBC_RXFLL                   0x04
@@ -84,6 +85,10 @@ extern "C" {
 #define BBC0_FBTXS                  0x2800
 #define BBC1_FBRXS                  0x3000
 #define BBC1_FBTXS                  0x3800
+
+// RF_PADFE
+#define PADFE                       0xC0
+#define RF_FEMODE3                  (3 << 6)
 
 // RF_AGCC
 #define AGCI                        (1 << 6)
