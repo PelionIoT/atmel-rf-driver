@@ -2177,11 +2177,11 @@ NanostackRfPhyAtmel::NanostackRfPhyAtmel(PinName spi_mosi, PinName spi_miso,
                                          PinName i2c_sda, PinName i2c_scl)
     :
 #if !defined(DISABLE_AT24MAC)
-      _mac(i2c_sda, i2c_scl),
+    _mac(i2c_sda, i2c_scl),
 #endif
-      _mac_addr(), _rf(NULL), _test_pins(NULL), _se2435_pa_pins(NULL), _mac_set(false),
-      _spi_mosi(spi_mosi), _spi_miso(spi_miso), _spi_sclk(spi_sclk),
-      _spi_cs(spi_cs), _spi_rst(spi_rst), _spi_slp(spi_slp), _spi_irq(spi_irq)
+    _mac_addr(), _rf(NULL), _test_pins(NULL), _se2435_pa_pins(NULL), _mac_set(false),
+    _spi_mosi(spi_mosi), _spi_miso(spi_miso), _spi_sclk(spi_sclk),
+    _spi_cs(spi_cs), _spi_rst(spi_rst), _spi_slp(spi_slp), _spi_irq(spi_irq)
 {
     _rf = new RFBits(_spi_mosi, _spi_miso, _spi_sclk, _spi_cs, _spi_rst, _spi_slp, _spi_irq);
 #ifdef TEST_GPIOS_ENABLED
