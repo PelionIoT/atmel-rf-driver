@@ -168,6 +168,9 @@ extern "C" {
 #define SR_2                        (2 << 0)
 #define SR_1                        (1 << 0)
 
+// BBC_FSKPHRTX
+#define DW                          (1 << 2)
+
 // BBC_OFDMPHRTX
 #define MCS                         0x07
 #define MCS_0                       (0 << 0)
