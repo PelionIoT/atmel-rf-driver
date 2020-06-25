@@ -307,6 +307,9 @@ static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_pt
             rf_conf_set_cca_threshold(*data_ptr);
             break;
         case PHY_EXTENSION_SET_TX_POWER:
+            if (*data_ptr > 100) {
+                return -1;
+            }
             rf_update_tx_power = rf_conf_set_tx_power(*data_ptr);
             if (rf_update_tx_power && (rf_state == RF_IDLE)) {
                 rf_receive(rf_rx_channel, rf_module);
