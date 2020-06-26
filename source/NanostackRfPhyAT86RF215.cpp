@@ -138,6 +138,7 @@ static bool rf_update_config = false;
 static bool rf_update_tx_power = false;
 static int8_t cca_threshold = -80;
 static uint8_t rf_tx_power = TXPWR_31;
+static bool data_whitening_enabled = true;
 static bool cca_enabled = true;
 static uint32_t rf_symbol_rate;
 
@@ -318,6 +319,13 @@ static int8_t rf_extension(phy_extension_type_e extension_type, uint8_t *data_pt
         case PHY_EXTENSION_SET_CHANNEL_CCA_THRESHOLD:
             cca_threshold = (int8_t) *data_ptr; // *NOPAD*
             break;
+        case PHY_EXTENSION_SET_DATA_WHITENING:
+            data_whitening_enabled = (bool) *data_ptr; // *NOPAD*
+            rf_update_config = true;
+            if (rf_state == RF_IDLE) {
+                rf_receive(rf_rx_channel, rf_module);
+            }
+            break;
         case PHY_EXTENSION_SET_802_15_4_MODE:
             mac_mode = (phy_802_15_4_mode_t) *data_ptr; // *NOPAD*
             if (mac_mode == IEEE_802_15_4_2011) {
@@ -430,6 +438,12 @@ static void rf_init_registers(rf_modules_e module)
         rf_write_bbc_register_field(BBC_AFC0, module, AFEN0, 0);
         // Enable FSK
         if (phy_current_config.modulation == M_2FSK) {
+            // Enable or disable data whitening
+            if (data_whitening_enabled) {
+                rf_write_bbc_register_field(BBC_FSKPHRTX, module, DW, DW);
+            } else {
+                rf_write_bbc_register_field(BBC_FSKPHRTX, module, DW, 0);
+            }
             rf_write_bbc_register_field(BBC_PC, module, PT, BB_MRFSK);
             // Set bandwidth time product
             rf_write_bbc_register_field(BBC_FSKC0, module, BT, BT_20);
