@@ -35,8 +35,6 @@
 #include "Timeout.h"
 #include "platform/mbed_error.h"
 
-using namespace std::chrono;
-
 #define TRACE_GROUP "AtRF"
 
 /*Worst case sensitivity*/
@@ -358,9 +356,9 @@ static rf_trx_part_e rf_radio_type_read(void)
 static void rf_if_ack_wait_timer_start(uint16_t slots)
 {
 #ifdef MBED_CONF_RTOS_PRESENT
-    rf->ack_timer.attach(rf_if_ack_timer_signal, slots * 50us);
+    rf->ack_timer.attach_us(rf_if_ack_timer_signal, slots * 50);
 #else
-    rf->ack_timer.attach(rf_ack_wait_timer_interrupt, slots * 50us);
+    rf->ack_timer.attach_us(rf_ack_wait_timer_interrupt, slots * 50);
 #endif
 }
 
@@ -374,9 +372,9 @@ static void rf_if_ack_wait_timer_start(uint16_t slots)
 static void rf_if_calibration_timer_start(uint32_t slots)
 {
 #ifdef MBED_CONF_RTOS_PRESENT
-    rf->cal_timer.attach(rf_if_cal_timer_signal, slots * 50us);
+    rf->cal_timer.attach_us(rf_if_cal_timer_signal, slots * 50);
 #else
-    rf->cal_timer.attach(rf_calibration_timer_interrupt, slots * 50us);
+    rf->cal_timer.attach_us(rf_calibration_timer_interrupt, slots * 50);
 #endif
 }
 
@@ -390,9 +388,9 @@ static void rf_if_calibration_timer_start(uint32_t slots)
 static void rf_if_cca_timer_start(uint32_t slots)
 {
 #ifdef MBED_CONF_RTOS_PRESENT
-    rf->cca_timer.attach(rf_if_cca_timer_signal, slots * 50us);
+    rf->cca_timer.attach_us(rf_if_cca_timer_signal, slots * 50);
 #else
-    rf->cca_timer.attach(rf_cca_timer_interrupt, slots * 50us);
+    rf->cca_timer.attach_us(rf_cca_timer_interrupt, slots * 50);
 #endif
 }
 
@@ -521,14 +519,14 @@ static void rf_if_reset_radio(void)
 #endif
     rf->IRQ.rise(nullptr);
     rf->RST = 1;
-    ThisThread::sleep_for(2ms);
+    ThisThread::sleep_for(2);
     rf->RST = 0;
-    ThisThread::sleep_for(10ms);
+    ThisThread::sleep_for(10);
     CS_RELEASE();
     rf->SLP_TR = 0;
-    ThisThread::sleep_for(10ms);
+    ThisThread::sleep_for(10);
     rf->RST = 1;
-    ThisThread::sleep_for(10ms);
+    ThisThread::sleep_for(10);
 
     rf->IRQ.rise(&rf_if_interrupt_handler);
 }
