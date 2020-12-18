@@ -177,8 +177,13 @@ static phy_rf_channel_configuration_s phy_current_config;
 static const phy_device_channel_page_s phy_channel_pages[] = {
     { CHANNEL_PAGE_0, &phy_24ghz},
     { CHANNEL_PAGE_2, &phy_subghz},
+    { CHANNEL_PAGE_0, NULL},
+    { CHANNEL_PAGE_0, NULL},
+    { CHANNEL_PAGE_0, NULL},
     { CHANNEL_PAGE_0, NULL}
 };
+
+static int rf_radio_driver_id_backup = -1;
 
 using namespace mbed;
 using namespace rtos;
@@ -246,6 +251,7 @@ static int8_t rf_device_register(const uint8_t *mac_addr)
     device_driver.phy_rx_cb = NULL;
     device_driver.phy_tx_done_cb = NULL;
     rf_radio_driver_id = arm_net_phy_register(&device_driver);
+    rf_radio_driver_id_backup = rf_radio_driver_id;
     rf_update_config = true;
     return rf_radio_driver_id;
 }
@@ -405,6 +411,10 @@ static void rf_init(void)
     fhss_uc_switch = test2_toggle;
 #endif //TEST_GPIOS_ENABLED
     rf_lock();
+    rf_unlock();
+    rf_lock();
+    rf_unlock();
+    rf_lock();
     // Disable interrupts
     rf_write_rf_register(RF_IRQM, RF_09, 0);
     rf_write_rf_register(RF_IRQM, RF_24, 0);
@@ -418,6 +428,10 @@ static void rf_init(void)
     rf->IRQ.rise(&rf_interrupt_handler);
     rf->IRQ.enable_irq();
     rf->tx_timer.start();
+    rf_unlock();
+    rf_lock();
+    rf_unlock();
+    rf_lock();
     rf_unlock();
 }
 
@@ -538,7 +552,7 @@ static void rf_init_registers(rf_modules_e module)
 
 static void rf_csma_ca_timer_interrupt(void)
 {
-    cca_prepare_status = device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_CCA_PREPARE, 0, 0);
+    cca_prepare_status = device_driver.phy_tx_done_cb(rf_radio_driver_id_backup, mac_tx_handle, PHY_LINK_CCA_PREPARE, 0, 0);
     if (cca_prepare_status == PHY_TX_NOT_ALLOWED) {
         if (rf_state == RF_CSMA_STARTED) {
             rf_state = RF_IDLE;
