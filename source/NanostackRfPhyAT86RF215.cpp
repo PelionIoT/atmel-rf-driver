@@ -485,7 +485,7 @@ static void rf_init_registers(rf_modules_e module)
             // Set low frequency offset bit
             rf_write_bbc_register_field(BBC_OFDMC, module, LFO, 0);
             // Configure using bandwidth option
-            rf_configure_by_ofdm_bandwidth_option(4, 300000, module);
+            rf_configure_by_ofdm_bandwidth_option(phy_current_config.ofdm_option, phy_current_config.datarate, module);
             // Set Gain control settings
             rf_write_rf_register_field(RF_AGCC, module, AVGS, AVGS_8_SAMPLES);
             rf_write_rf_register_field(RF_AGCC, module, AGCI, 0);
