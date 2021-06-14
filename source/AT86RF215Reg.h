@@ -81,6 +81,7 @@ extern "C" {
 #define BBC_FSKC1                   0x61
 #define BBC_FSKC2                   0x62
 #define BBC_FSKC3                   0x63
+#define BBC_FSKC4                   0x64
 #define BBC_FSKPLL                  0x65
 #define BBC_FSKPHRTX                0x6A
 #define BBC_FSKPHRRX                0x6B
@@ -170,6 +171,10 @@ extern "C" {
 #define SR_2                        (2 << 0)
 #define SR_1                        (1 << 0)
 
+
+// BBC_FSKPHRRX
+#define MS                          (1 << 6)
+
 // BBC_FSKPHRTX
 #define DW                          (1 << 2)
 
@@ -232,12 +237,22 @@ extern "C" {
 // BBC_FSKC2
 #define RXO                         0x60
 #define RXO_DIS                     (0 << 5)
+#define MSE                         (1 << 3)
 #define FECIE                       (1 << 0)
 
 // BBC_FSKC3
 #define SFDT                        0xF0
 #define PDT                         0x0F
 #define PDT_6                       (6 << 0)
+
+// BBC_FSKC4
+#define CSFD1                       0x0C
+#define CSFD0                       0x03
+#define RAWRBIT                     (1 << 4)
+#define UNCODED_RAW_SFD1            (1 << 2)
+#define UNCODED_IEEE_SFD1           (0 << 2)
+#define UNCODED_RAW_SFD0            (1 << 0)
+#define UNCODED_IEEE_SFD0           (0 << 0)
 
 // BBC_AFFTM
 #define TYPE_2                      (1 << 2)

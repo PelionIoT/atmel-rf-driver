@@ -423,6 +423,16 @@ static void rf_init(void)
 
 static void rf_init_registers(rf_modules_e module)
 {
+//    tr_info("RF config update:");
+//    tr_info("Frequency(ch0): %"PRIu32"Hz", phy_current_config.channel_0_center_frequency);
+//    tr_info("Channel spacing: %"PRIu32"Hz", phy_current_config.channel_spacing);
+//    tr_info("Datarate: %"PRIu32"bps", phy_current_config.datarate);
+//    tr_info("Number of channels: %u", phy_current_config.number_of_channels);
+//    tr_info("Modulation: %u", phy_current_config.modulation);
+//    tr_info("Modulation index: %u", phy_current_config.modulation_index);
+//    tr_info("FEC: %u", phy_current_config.fec);
+//    tr_info("OFDM MCS: %u", phy_current_config.ofdm_mcs);
+//    tr_info("OFDM option: %u", phy_current_config.ofdm_option);
     // O-QPSK configuration using IEEE Std 802.15.4-2011
     // FSK/OFDM configuration using IEEE Std 802.15.4g-2012
     // OFDM configuration is experimental only
@@ -471,6 +481,9 @@ static void rf_init_registers(rf_modules_e module)
             rf_write_bbc_register_field(BBC_FSKC2, module, FECIE, 0);
             // Disable receiver override
             rf_write_bbc_register_field(BBC_FSKC2, module, RXO, RXO_DIS);
+            // Enable mode switch detection
+            rf_write_bbc_register_field(BBC_FSKC2, module, MSE, MSE);
+            rf_write_bbc_register_field(BBC_FSKC4, module, RAWRBIT, 0);
             // Set modulation index
             if (phy_current_config.modulation_index == MODULATION_INDEX_0_5) {
                 rf_write_bbc_register_field(BBC_FSKC0, module, MIDX, MIDX_05);
@@ -559,6 +572,23 @@ static void rf_csma_ca_timer_signal(void)
     rf->irq_thread_215.flags_set(SIG_TIMER_CCA);
 }
 
+typedef struct mode_switch_phr_s {
+    bool parity;
+    uint8_t checksum;
+    uint8_t phy_mode_id;
+    bool mode_switch;
+} mode_switch_phr_t;
+
+static mode_switch_phr_t mode_switch_phr = {
+    .parity = false,
+    .checksum = 2,
+    .phy_mode_id = 8,
+    .mode_switch = true
+};
+
+static uint8_t test_mode_switch_count = 0;
+static bool sending_mode_switch_phr = false;
+
 static int8_t rf_start_csma_ca(uint8_t *data_ptr, uint16_t data_length, uint8_t tx_handle, data_protocol_e data_protocol)
 {
     rf_lock();
@@ -573,14 +603,35 @@ static int8_t rf_start_csma_ca(uint8_t *data_ptr, uint16_t data_length, uint8_t 
     if ((version != MAC_FRAME_VERSION_2) && (*data_ptr & FC_AR)) {
         tx_sequence = *(data_ptr + 2);
     }
-    rf_write_tx_buffer(data_ptr, data_length, rf_module);
+
+    //tr_info("test_mode_switch_count: %u %u", test_mode_switch_count, data_length);
+
+    bool skip_mode_switch = false;
+
+    if (data_length == 105 || data_length == 51 || data_length == 44 || data_length == 42) {
+        skip_mode_switch = true;
+    }
+
+    if (skip_mode_switch || test_mode_switch_count++ != 50) {
+        rf_write_tx_buffer(data_ptr, data_length, rf_module);
+    } else {
+        uint16_t mode_switch = (uint8_t)mode_switch_phr.parity << 15 | mode_switch_phr.checksum << 11 | mode_switch_phr.phy_mode_id << 3 | (uint8_t)mode_switch_phr.mode_switch;
+        uint8_t mode_switch_ppdu[2] = {(uint8_t) mode_switch, (uint8_t)(mode_switch >> 8)};
+        rf_write_tx_buffer(mode_switch_ppdu, 2, rf_module);
+        test_mode_switch_count = 0;
+        sending_mode_switch_phr = true;
+    }
     // Add CRC bytes
     if (mac_mode == IEEE_802_15_4_2011) {
         data_length += 2;
     } else {
         data_length += 4;
     }
-    rf_write_tx_packet_length(data_length, rf_module);
+    if (sending_mode_switch_phr == true) {
+        rf_write_tx_packet_length(2, rf_module);
+    } else {
+        rf_write_tx_packet_length(data_length, rf_module);
+    }
     mac_tx_handle = tx_handle;
 
     if (tx_time) {
@@ -657,10 +708,28 @@ static void rf_handle_tx_done(void)
     rf_state = RF_IDLE;
     rf_receive(rf_rx_channel, rf_module);
     device_driver.phy_tx_done_cb(rf_radio_driver_id, mac_tx_handle, PHY_LINK_TX_SUCCESS, 0, 0);
+    if (sending_mode_switch_phr) {
+        sending_mode_switch_phr = false;
+        phy_rf_channel_configuration_s rf_configs;
+        rf_configs.channel_0_center_frequency = 863100000;
+        rf_configs.channel_spacing = 200000;
+        rf_configs.datarate = 150000;
+        rf_configs.number_of_channels = 35;
+        rf_configs.modulation = (phy_modulation_e)4;
+        rf_configs.modulation_index = (phy_modulation_index_e)0;
+        rf_configs.fec = 0;
+        rf_configs.ofdm_option = (phy_ofdm_option_e)0;
+        rf_configs.ofdm_mcs = (phy_ofdm_mcs_e)0;
+        rf_extension(PHY_EXTENSION_SET_RF_CONFIGURATION, (uint8_t *)&rf_configs);
+    }
 }
 
 static void rf_start_tx(void)
 {
+    // Enable uncoded raw mode for SFD 0
+    if (sending_mode_switch_phr) {
+        rf_write_bbc_register_field(BBC_FSKC4, rf_module, CSFD0, UNCODED_RAW_SFD0);
+    }
     receiver_enabled = false;
     rf_change_state(RF_TXPREP, rf_module);
     rf_irq_bbc_enable(TXFE, rf_module);
@@ -688,6 +757,14 @@ static void rf_handle_ack(uint8_t seq_number, uint8_t pending)
 
 static void rf_handle_rx_done(void)
 {
+    if (cur_rx_packet_len == 2) {
+        //tr_info("BBC_FSKPHRRX %x %u", rf_read_bbc_register(BBC_FSKPHRRX, rf_module), cur_rx_packet_len);
+        if (!rf_read_rx_buffer(cur_rx_packet_len, rf_module)) {
+            device_driver.phy_rx_cb(rx_buffer, cur_rx_packet_len, 0xf0, 0, rf_radio_driver_id);
+            //tr_info("%s", trace_array(rx_buffer, 2));
+        }
+    }
+
     receiver_enabled = false;
     TEST_RX_DONE
     rf_backup_timer_stop();
@@ -773,6 +850,8 @@ static void rf_receive(uint16_t rx_channel, rf_modules_e module)
         rf_set_channel(rx_channel, module);
         rf_rx_channel = rx_channel;
     }
+    // Enable uncoded IEEE mode for SFD 0
+    rf_write_bbc_register_field(BBC_FSKC4, module, CSFD0, UNCODED_IEEE_SFD0);
     rf_change_state(RF_RX, module);
     rf_irq_bbc_enable(RXFS, module);
     rf_irq_bbc_enable(RXFE, module);
